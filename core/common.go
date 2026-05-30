@@ -162,7 +162,7 @@ func patchSelectGroup(mapping map[string]string) {
 
 func defaultSetupParams() *SetupParams {
 	return &SetupParams{
-		TestURL:     "https://www.gstatic.com/generate_204",
+		TestURL:     "https://g.cn/generate_204",
 		SelectedMap: map[string]string{},
 	}
 }
