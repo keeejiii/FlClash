@@ -3,6 +3,9 @@ name: build-release
 on:
   workflow_dispatch:
 
+env:
+  IS_STABLE: true
+
 jobs:
   build-release-android:
     name: Build Release Android APK
@@ -12,6 +15,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Setup Android Signing
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SERVICE_JSON: ${{ secrets.SERVICE_JSON }}
+        run: |
+          echo "$KEYSTORE" | base64 --decode > android/app/keystore.jks
+          echo "keyAlias=$KEY_ALIAS" >> android/local.properties
+          echo "storePassword=$STORE_PASSWORD" >> android/local.properties
+          echo "keyPassword=$KEY_PASSWORD" >> android/local.properties
+          if [ -n "$SERVICE_JSON" ]; then
+            echo "$SERVICE_JSON" | base64 --decode > android/app/google-services.json
+          else
+            echo "SERVICE_JSON not configured, building without Firebase config"
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+          cache-dependency-path: |
+            core/go.sum
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -31,29 +59,20 @@ jobs:
         with:
           ndk-version: r28c
           add-to-path: true
+          link-to-sdk: true
 
-      - name: Setup Rust
+      - name: Get Flutter Dependency
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-        shell: bash
+          flutter --version
+          flutter pub get
 
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Build core (Android)
-        run: |
-          cd core/Clash.Meta
-          go mod download
-          cd ../..
-          dart setup.dart android --env stable
-
-      - name: Build release APK
-        run: flutter build apk --release
+      - name: Setup
+        run: dart setup.dart android --env stable -v
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: flclash-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: flclash-release-android
+          path: ./dist
+          overwrite: true
           retention-days: 7
