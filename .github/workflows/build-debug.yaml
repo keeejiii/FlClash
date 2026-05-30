@@ -33,7 +33,10 @@ jobs:
           add-to-path: true
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        shell: bash
 
       - name: Install dependencies
         run: flutter pub get
