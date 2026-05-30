@@ -1,0 +1,56 @@
+name: build-debug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-debug-android:
+    name: Build Debug Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.9
+          cache: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28c
+          add-to-path: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build core (Android)
+        run: |
+          cd core/Clash.Meta
+          go mod download
+          cd ../..
+          dart setup.dart android --env stable
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flclash-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
