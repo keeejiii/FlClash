@@ -2258,7 +2258,7 @@ return $default(_that.enable,_that.device,_that.autoRoute,_that.stack,_that.mtu,
 @JsonSerializable()
 
 class _Tun implements Tun {
-  const _Tun({this.enable = false, this.device = appName, @JsonKey(name: 'auto-route') this.autoRoute = false, this.stack = TunStack.mixed, this.mtu = 4064, @JsonKey(name: 'dns-hijack') final  List<String> dnsHijack = const ['any:53'], @JsonKey(name: 'route-address') final  List<String> routeAddress = const []}): _dnsHijack = dnsHijack,_routeAddress = routeAddress;
+  const _Tun({this.enable = false, this.device = appName, @JsonKey(name: 'auto-route') this.autoRoute = false, this.stack = TunStack.mixed, this.mtu = 1480, @JsonKey(name: 'dns-hijack') final  List<String> dnsHijack = const ['any:53'], @JsonKey(name: 'route-address') final  List<String> routeAddress = const []}): _dnsHijack = dnsHijack,_routeAddress = routeAddress;
   factory _Tun.fromJson(Map<String, dynamic> json) => _$TunFromJson(json);
 
 @override@JsonKey() final  bool enable;
