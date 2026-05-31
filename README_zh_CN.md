@@ -61,6 +61,13 @@ on Mobile:
 
 <a href="https://chen08209.github.io/FlClash-fdroid-repo/repo?fingerprint=789D6D32668712EF7672F9E58DEEB15FBD6DCEEC5AE7A4371EA72F2AAE8A12FD"><img alt="Get it on F-Droid" src="snapshots/get-it-on-fdroid.svg" width="200px"/></a> <a href="https://github.com/chen08209/FlClash/releases"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" width="200px"/></a>
 
+## Fork 文档
+
+如果你查看的是 `keeejiii/FlClash` fork，额外文档见：
+
+- [`README_FORK_zh_CN.md`](./README_FORK_zh_CN.md)：说明这个 fork 相对原版 FlClash 的优化方向、优势与取舍
+- [`UPDATELOG_zh_CN.md`](./UPDATELOG_zh_CN.md)：记录本轮 Android 省电与后台行为优化的详细修改过程、涉及文件、收益、风险与提交记录
+
 ## Build
 
 1. 更新 submodules
