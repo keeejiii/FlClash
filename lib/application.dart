@@ -25,7 +25,9 @@ class Application extends ConsumerStatefulWidget {
 
 class ApplicationState extends ConsumerState<Application> {
   Timer? _autoUpdateProfilesTaskTimer;
+  Timer? _networkChangeDebounceTimer;
   bool _preHasVpn = false;
+  ConnectivityResult? _lastPrimaryConnectivity;
 
   final _pageTransitionsTheme = const PageTransitionsTheme(
     builders: <TargetPlatform, PageTransitionsBuilder>{
@@ -89,6 +91,56 @@ class ApplicationState extends ConsumerState<Application> {
     });
   }
 
+  ConnectivityResult _getPrimaryConnectivity(List<ConnectivityResult> results) {
+    if (results.contains(ConnectivityResult.wifi)) {
+      return ConnectivityResult.wifi;
+    }
+    if (results.contains(ConnectivityResult.mobile)) {
+      return ConnectivityResult.mobile;
+    }
+    if (results.contains(ConnectivityResult.ethernet)) {
+      return ConnectivityResult.ethernet;
+    }
+    if (results.contains(ConnectivityResult.bluetooth)) {
+      return ConnectivityResult.bluetooth;
+    }
+    if (results.contains(ConnectivityResult.other)) {
+      return ConnectivityResult.other;
+    }
+    if (results.contains(ConnectivityResult.vpn)) {
+      return ConnectivityResult.vpn;
+    }
+    return ConnectivityResult.none;
+  }
+
+  void _handleAndroidNetworkChange(List<ConnectivityResult> results) {
+    if (!system.isAndroid) return;
+
+    final primaryConnectivity = _getPrimaryConnectivity(results);
+    final previousConnectivity = _lastPrimaryConnectivity;
+    _lastPrimaryConnectivity = primaryConnectivity;
+
+    if (previousConnectivity == null || previousConnectivity == primaryConnectivity) {
+      return;
+    }
+
+    _networkChangeDebounceTimer?.cancel();
+    _networkChangeDebounceTimer = Timer(const Duration(milliseconds: 800), () async {
+      if (!mounted) return;
+      if (!ref.read(isStartProvider) || ref.read(suspendProvider)) {
+        return;
+      }
+      commonPrint.log(
+        'primary connectivity changed: $previousConnectivity -> $primaryConnectivity, closing stale connections',
+      );
+      try {
+        await coreController.closeConnections();
+      } catch (e) {
+        commonPrint.log('closeConnections on network change failed: $e');
+      }
+    });
+  }
+
   Widget _buildPlatformState({required Widget child}) {
     if (system.isDesktop) {
       return WindowManager(
@@ -107,6 +159,7 @@ class ApplicationState extends ConsumerState<Application> {
           onConnectivityChanged: (results) async {
             commonPrint.log('connectivityChanged ${results.toString()}');
             ref.read(systemActionProvider.notifier).updateLocalIp();
+            _handleAndroidNetworkChange(results);
             final hasVpn = results.contains(ConnectivityResult.vpn);
             if (_preHasVpn == hasVpn) {
               ref.read(checkIpNumProvider.notifier).add();
@@ -188,6 +241,7 @@ class ApplicationState extends ConsumerState<Application> {
   Future<void> dispose() async {
     linkManager.destroy();
     _autoUpdateProfilesTaskTimer?.cancel();
+    _networkChangeDebounceTimer?.cancel();
     await coreController.destroy();
     await ref.read(systemActionProvider.notifier).handleExit();
     super.dispose();
