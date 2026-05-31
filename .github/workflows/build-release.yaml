@@ -2,6 +2,22 @@ name: build-release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag (e.g. v1.0.0)
+        required: true
+      release_name:
+        description: Release title (optional, defaults to tag)
+        required: false
+        default: ''
+      prerelease:
+        description: Mark release as prerelease
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
 
 env:
   IS_STABLE: true
@@ -76,3 +92,29 @@ jobs:
           path: ./dist
           overwrite: true
           retention-days: 7
+
+      - name: Prepare release metadata
+        run: |
+          release_name="${{ github.event.inputs.release_name }}"
+          if [ -z "$release_name" ]; then
+            release_name="${{ github.event.inputs.tag_name }}"
+          fi
+          echo "RELEASE_NAME=$release_name" >> "$GITHUB_ENV"
+          cat > release.md <<EOF
+          Manual Android build triggered from GitHub Actions.
+
+          - Tag: ${{ github.event.inputs.tag_name }}
+          - Commit: ${{ github.sha }}
+          - Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ env.RELEASE_NAME }}
+          prerelease: ${{ github.event.inputs.prerelease }}
+          files: ./dist/*
+          body_path: ./release.md
+          overwrite_files: true
