@@ -16,13 +16,20 @@ class TickBuilder extends StatefulWidget {
   State<TickBuilder> createState() => _TickBuilderState();
 }
 
-class _TickBuilderState extends State<TickBuilder> {
+class _TickBuilderState extends State<TickBuilder> with WidgetsBindingObserver {
   Timer? _timer;
   int _tick = 0;
+
+  bool get _isUiActive {
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    return lifecycleState == null ||
+        lifecycleState == AppLifecycleState.resumed;
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startTimer();
   }
 
@@ -36,14 +43,39 @@ class _TickBuilderState extends State<TickBuilder> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _cancelTimer();
     super.dispose();
   }
 
-  void _startTimer() {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (mounted) {
+        setState(() {
+          _tick++;
+        });
+      }
+      _startTimer();
+      return;
+    }
+    _cancelTimer();
+  }
+
+  void _cancelTimer() {
     _timer?.cancel();
+    _timer = null;
+  }
+
+  void _startTimer() {
+    _cancelTimer();
+    if (!_isUiActive) return;
     _timer = Timer.periodic(widget.duration, (_) {
       if (!mounted) return;
+      if (!_isUiActive) {
+        _cancelTimer();
+        return;
+      }
       setState(() {
         _tick++;
       });

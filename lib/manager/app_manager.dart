@@ -22,12 +22,15 @@ class AppStateManager extends ConsumerStatefulWidget {
 
 class _AppStateManagerState extends ConsumerState<AppStateManager>
     with WidgetsBindingObserver {
+  bool get _isUiActive =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     ref.listenManual(checkIpProvider, (prev, next) {
-      if (prev != next && next.a && next.c) {
+      if (prev != next && next.a && next.c && _isUiActive) {
         ref.read(networkDetectionProvider.notifier).startCheck();
       }
     });
@@ -88,6 +91,8 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
       permissions.check();
       render?.resume();
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(systemActionProvider.notifier).updateLocalIp();
+        ref.read(checkIpNumProvider.notifier).add();
         ref.read(setupActionProvider.notifier).tryCheckIp();
         if (system.isAndroid) {
           ref.read(coreActionProvider.notifier).tryStartCore();

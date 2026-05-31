@@ -91,6 +91,11 @@ class ApplicationState extends ConsumerState<Application> {
     });
   }
 
+  bool get _shouldUpdateForegroundNetworkUi {
+    if (!system.isAndroid) return true;
+    return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
   ConnectivityResult _getPrimaryConnectivity(List<ConnectivityResult> results) {
     if (results.contains(ConnectivityResult.wifi)) {
       return ConnectivityResult.wifi;
@@ -120,25 +125,40 @@ class ApplicationState extends ConsumerState<Application> {
     final previousConnectivity = _lastPrimaryConnectivity;
     _lastPrimaryConnectivity = primaryConnectivity;
 
-    if (previousConnectivity == null || previousConnectivity == primaryConnectivity) {
+    if (previousConnectivity == null ||
+        previousConnectivity == primaryConnectivity) {
       return;
     }
 
     _networkChangeDebounceTimer?.cancel();
-    _networkChangeDebounceTimer = Timer(const Duration(milliseconds: 800), () async {
-      if (!mounted) return;
-      if (!ref.read(isStartProvider) || ref.read(suspendProvider)) {
-        return;
-      }
-      commonPrint.log(
-        'primary connectivity changed: $previousConnectivity -> $primaryConnectivity, closing stale connections',
-      );
-      try {
-        await coreController.closeConnections();
-      } catch (e) {
-        commonPrint.log('closeConnections on network change failed: $e');
-      }
-    });
+    _networkChangeDebounceTimer = Timer(
+      const Duration(milliseconds: 800),
+      () async {
+        if (!mounted) return;
+        if (!ref.read(isStartProvider) || ref.read(suspendProvider)) {
+          return;
+        }
+        commonPrint.log(
+          'primary connectivity changed: $previousConnectivity -> '
+          '$primaryConnectivity, closing stale connections',
+        );
+        try {
+          await coreController.closeConnections();
+        } catch (e) {
+          commonPrint.log('closeConnections on network change failed: $e');
+        }
+      },
+    );
+  }
+
+  void _updateForegroundNetworkUi(List<ConnectivityResult> results) {
+    if (!_shouldUpdateForegroundNetworkUi) return;
+    ref.read(systemActionProvider.notifier).updateLocalIp();
+    final hasVpn = results.contains(ConnectivityResult.vpn);
+    if (_preHasVpn == hasVpn) {
+      ref.read(checkIpNumProvider.notifier).add();
+    }
+    _preHasVpn = hasVpn;
   }
 
   Widget _buildPlatformState({required Widget child}) {
@@ -158,13 +178,8 @@ class ApplicationState extends ConsumerState<Application> {
         child: ConnectivityManager(
           onConnectivityChanged: (results) async {
             commonPrint.log('connectivityChanged ${results.toString()}');
-            ref.read(systemActionProvider.notifier).updateLocalIp();
             _handleAndroidNetworkChange(results);
-            final hasVpn = results.contains(ConnectivityResult.vpn);
-            if (_preHasVpn == hasVpn) {
-              ref.read(checkIpNumProvider.notifier).add();
-            }
-            _preHasVpn = hasVpn;
+            _updateForegroundNetworkUi(results);
           },
           child: child,
         ),

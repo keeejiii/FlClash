@@ -16,29 +16,54 @@ class MemoryInfo extends StatefulWidget {
   State<MemoryInfo> createState() => _MemoryInfoState();
 }
 
-class _MemoryInfoState extends State<MemoryInfo> {
+class _MemoryInfoState extends State<MemoryInfo> with WidgetsBindingObserver {
   Timer? timer;
+
+  bool get _isUiActive {
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    return lifecycleState == null ||
+        lifecycleState == AppLifecycleState.resumed;
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _updateMemory();
   }
 
   @override
   void dispose() {
-    timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _cancelUpdateTimer();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _updateMemory();
+      return;
+    }
+    _cancelUpdateTimer();
+  }
+
+  void _cancelUpdateTimer() {
+    timer?.cancel();
+    timer = null;
+  }
+
   Future<void> _updateMemory() async {
+    _cancelUpdateTimer();
+    if (!_isUiActive) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || !_isUiActive) return;
       final rss = ProcessInfo.currentRss;
-      if (coreController.isCompleted) {
-        _memoryStateNotifier.value = await coreController.getMemory() + rss;
-      } else {
-        _memoryStateNotifier.value = rss;
-      }
+      final memory = coreController.isCompleted
+          ? await coreController.getMemory() + rss
+          : rss;
+      if (!mounted || !_isUiActive) return;
+      _memoryStateNotifier.value = memory;
       timer = Timer(const Duration(seconds: 2), () async {
         _updateMemory();
       });
