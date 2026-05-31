@@ -49,6 +49,7 @@ abstract class VpnOptions with _$VpnOptions {
     required bool systemProxy,
     required List<String> bypassDomain,
     required String stack,
+    required int mtu,
     @Default([]) List<String> routeAddress,
   }) = _VpnOptions;
 
