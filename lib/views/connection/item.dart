@@ -43,7 +43,7 @@ class TrackerInfoItem extends ConsumerWidget {
     final value = ref.watch(
       patchClashConfigProvider.select(
         (state) =>
-            state.findProcessMode == FindProcessMode.always && system.isAndroid,
+            state.findProcessMode != FindProcessMode.off && system.isAndroid,
       ),
     );
     final title = Column(

@@ -341,7 +341,7 @@ class FindProcessItem extends ConsumerWidget {
     final appLocalizations = context.appLocalizations;
     final findProcess = ref.watch(
       patchClashConfigProvider.select(
-        (state) => state.findProcessMode == FindProcessMode.always,
+        (state) => state.findProcessMode != FindProcessMode.off,
       ),
     );
 
@@ -357,7 +357,7 @@ class FindProcessItem extends ConsumerWidget {
               .update(
                 (state) => state.copyWith(
                   findProcessMode: value
-                      ? FindProcessMode.always
+                      ? FindProcessMode.strict
                       : FindProcessMode.off,
                 ),
               );
