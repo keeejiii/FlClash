@@ -17,13 +17,17 @@ class ConnectionsView extends ConsumerStatefulWidget {
   ConsumerState<ConnectionsView> createState() => _ConnectionsViewState();
 }
 
-class _ConnectionsViewState extends ConsumerState<ConnectionsView> {
+class _ConnectionsViewState extends ConsumerState<ConnectionsView>
+    with WidgetsBindingObserver {
   final _connectionsStateNotifier = ValueNotifier<TrackerInfosState>(
     const TrackerInfosState(),
   );
   final ScrollController _scrollController = ScrollController();
 
   Timer? timer;
+
+  bool get _isUiActive =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
   List<Widget> _buildActions() {
     return [
@@ -49,21 +53,43 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView> {
     );
   }
 
+  void _cancelUpdateTimer() {
+    timer?.cancel();
+    timer = null;
+  }
+
   Future<void> _updateConnectionsTask() async {
+    if (!_isUiActive) {
+      _cancelUpdateTimer();
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (mounted) {
-        await _updateConnections();
-        timer = Timer(const Duration(seconds: 1), () async {
-          _updateConnectionsTask();
-        });
+      if (!mounted || !_isUiActive) {
+        _cancelUpdateTimer();
+        return;
       }
+      await _updateConnections();
+      _cancelUpdateTimer();
+      timer = Timer(const Duration(seconds: 1), () async {
+        _updateConnectionsTask();
+      });
     });
   }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _updateConnectionsTask();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _updateConnectionsTask();
+      return;
+    }
+    _cancelUpdateTimer();
   }
 
   Future<void> _updateConnections() async {
@@ -79,10 +105,10 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView> {
 
   @override
   void dispose() {
-    timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _cancelUpdateTimer();
     _connectionsStateNotifier.dispose();
     _scrollController.dispose();
-    timer = null;
     super.dispose();
   }
 

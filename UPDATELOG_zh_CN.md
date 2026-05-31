@@ -42,7 +42,7 @@
 
 ### 阶段 4（3C-lite）：后台丢弃高频 UI 事件
 - 后台不再分发 `delay` / `request` 这类高频 UI 事件
-- 保留 `log` / `loaded` / `crash`
+- 保留 `log` / `loaded` / `crash`，且日志不做等级过滤
 
 ---
 
@@ -314,7 +314,8 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 在 `CoreEventManager` 里增加事件前置过滤：
 
 #### 前台（`AppLifecycleState.resumed`）
-- 所有事件正常分发
+- UI 保持完整工作
+- `delay` / `request` / `traffic` 等 UI 相关逻辑正常运行
 
 #### 后台（非 `resumed`）
 丢弃：
@@ -326,18 +327,30 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - `CoreEventType.loaded`
 - `CoreEventType.crash`
 
+同时，页面级的明显 UI 刷新残口也进一步接入 lifecycle：
+
+- `ConnectionsView` 的 1 秒 `getConnections()` 轮询，在后台直接停止，回前台再恢复
+- `LogsView` 的显示刷新层，在后台不再继续推动 `_logsStateNotifier`，但日志采集与保留本身不受影响，回前台后再一次性同步显示
+
+这里的设计原则不是“按页面缩减前台 UI”，而是：
+
+> **前台 UI 完整，后台 UI 静默；运行层与日志保留。**
+
 ### 4.5 收益
 
 - 后台不再消费高频 UI 事件
 - 连对应的事件反序列化成本也能省一点
 - crash 事件保留，不影响后台异常感知
-- loaded/log 保留，不破坏必要状态同步和错误暴露
+- loaded/log 保留，不破坏必要状态同步、调试和错误暴露
+- 连接页轮询和日志页显示层也进一步纳入后台静默，更接近“后台只留服务与日志链路”的目标
+- 规则更统一：前台完整、后台静默，不再引入额外的页面级运行策略
 
 ### 4.6 风险与取舍
 
-- 后台时 request / delay 页签数据不会继续增长
-- 这是预期行为：后台不再为前台不可见页面持续加工高频数据
-- 不影响代理本身运行
+- 后台时 request / delay 等前台专属 UI 数据不会继续增长
+- 这是预期行为：后台不再为不可见 UI 持续加工高频数据
+- 日志保留全部等级（debug / info / warning / error），用于后台调试与排障
+- 没有继续采用“前台按页面细分 UI 工作”的策略，以降低规则复杂度和后续维护成本
 
 ### 4.7 对应提交
 
@@ -353,18 +366,29 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 2. **后台真正停 foreground timer**
 3. **切网后主动清理旧连接**
 4. **后台不再消费高频 UI 事件**
-5. **通知栏回退静态前台 service 形态**
-6. **Doze 监听补齐**
+5. **连接页轮询纳入 lifecycle 静默**
+6. **日志页显示层纳入 lifecycle 静默，但日志链路完整保留**
+7. **通知栏回退静态前台 service 形态**
+8. **日志在前后台都完整保留**
+9. **Doze 监听补齐**
 
 这套方案的特点不是“激进智能保活”或“智能暂停代理”，而是：
 
-> **在不伤害 VPN / service 主链路的前提下，尽量减少后台无意义活跃度。**
+> **前台 UI 完整、后台 UI 静默，同时尽量不伤害 VPN / service 主链路。**
 
 ---
 
-## 五、对后台留存的判断
+## 五、对后台留存与前台行为的判断
 
-这轮修改的目标不是“用更复杂的保活手段提升留存”，而是“降低后台噪音，避免系统把它判成高活跃后台”。
+这轮修改的目标不是“用更复杂的保活手段提升留存”，而是“降低后台噪音，避免系统把它判成高活跃后台”，同时保持：
+
+- **前台：UI 完整工作**
+- **后台：UI 静默**
+- **日志：全保留**
+
+这里需要特别说明一点：
+
+> **当前这个 fork 在前台的 UI 运行逻辑，已经基本回到接近上游的完整状态；与上游的主要差异，集中在后台 UI 静默策略，以及少量 Android 辅助行为（静态通知、切网清旧连接、Doze 监听）。**
 
 因此：
 
@@ -414,9 +438,10 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 如果后续继续优化，建议顺序：
 
 1. **先观察实际体感与后台稳定性**
-2. **如果网络切换响应仍不够，再考虑 3B-2（轻量 native callback）**
-3. **如果要做可配置化，再把部分后台策略做成开关**
-4. **仍然不建议直接搬 BettBox 的 smart stop 完整架构**
+2. **继续优先收紧“只服务 UI 的后台行为”**
+3. **如果网络切换响应仍不够，再考虑 3B-2（轻量 native callback）**
+4. **如果要做可配置化，再把部分后台策略做成开关**
+5. **仍然不建议直接搬 BettBox 的 smart stop 完整架构**
 
 ---
 
@@ -429,6 +454,7 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - `94f7470` `perf(android): pause foreground timers while app is backgrounded`
 - `a860e91` `perf(android): close stale connections after network changes`
 - `bcb1ff0` `perf(android): skip ui-heavy core events while app is backgrounded`
+- `c47c3d6` `perf(android): keep full UI updates in foreground only`
 
 ---
 
