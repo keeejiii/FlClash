@@ -21,20 +21,6 @@ class CoreManager extends ConsumerStatefulWidget {
 
 class _CoreContainerState extends ConsumerState<CoreManager>
     with CoreEventListener {
-  bool get _isForegroundActive {
-    return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-  }
-
-  bool get _shouldHandleDelayEvent {
-    return _isForegroundActive &&
-        ref.read(currentPageLabelProvider) == PageLabel.proxies;
-  }
-
-  bool get _shouldHandleRequestEvent {
-    return _isForegroundActive &&
-        ref.read(currentPageLabelProvider) == PageLabel.requests;
-  }
-
   @override
   Widget build(BuildContext context) {
     return widget.child;
@@ -76,9 +62,6 @@ class _CoreContainerState extends ConsumerState<CoreManager>
 
   @override
   Future<void> onDelay(Delay delay) async {
-    if (!_shouldHandleDelayEvent) {
-      return;
-    }
     super.onDelay(delay);
     final proxiesAction = ref.read(proxiesActionProvider.notifier);
     proxiesAction.setDelay(delay);
@@ -98,9 +81,6 @@ class _CoreContainerState extends ConsumerState<CoreManager>
 
   @override
   void onRequest(TrackerInfo trackerInfo) async {
-    if (!_shouldHandleRequestEvent) {
-      return;
-    }
     ref.read(requestsProvider.notifier).addRequest(trackerInfo);
     super.onRequest(trackerInfo);
   }
