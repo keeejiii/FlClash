@@ -81,16 +81,30 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
   @override
   Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     commonPrint.log('$state');
+    final ref = globalState.container;
+    final setupAction = ref.read(setupActionProvider.notifier);
     if (state == AppLifecycleState.resumed) {
+      setupAction.resumeForegroundUpdates();
       permissions.check();
       render?.resume();
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final ref = globalState.container;
         ref.read(setupActionProvider.notifier).tryCheckIp();
         if (system.isAndroid) {
           ref.read(coreActionProvider.notifier).tryStartCore();
         }
       });
+      return;
+    }
+
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        setupAction.pauseForegroundUpdates();
+        break;
+      case AppLifecycleState.resumed:
+        break;
     }
   }
 

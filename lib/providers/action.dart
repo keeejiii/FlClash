@@ -123,6 +123,7 @@ class SetupAction extends _$SetupAction {
   DateTime? startTime;
 
   bool get isStart => startTime != null && startTime!.isBeforeNow;
+  bool get _hasActiveUpdateTimer => _updateTimer?.isActive ?? false;
 
   @override
   void build() {}
@@ -143,6 +144,26 @@ class SetupAction extends _$SetupAction {
     ref.read(requestsProvider.notifier).value = FixedList(500);
   }
 
+  void _startUpdateTimer() {
+    if (_hasActiveUpdateTimer || !isStart) return;
+    _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      ref.read(commonActionProvider.notifier).updateRunTime();
+      ref.read(commonActionProvider.notifier).updateTraffic();
+    });
+  }
+
+  void pauseForegroundUpdates() {
+    _updateTimer?.cancel();
+    _updateTimer = null;
+  }
+
+  void resumeForegroundUpdates() {
+    if (!isStart) return;
+    ref.read(commonActionProvider.notifier).updateRunTime();
+    ref.read(commonActionProvider.notifier).updateTraffic();
+    _startUpdateTimer();
+  }
+
   Future<void> _handleStart() async {
     startTime ??= DateTime.now();
     //The local status must be updated when performing the run task
@@ -151,10 +172,7 @@ class SetupAction extends _$SetupAction {
     if (!ref.read(suspendProvider)) {
       await coreController.startListener();
     }
-    _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      ref.read(commonActionProvider.notifier).updateRunTime();
-      ref.read(commonActionProvider.notifier).updateTraffic();
-    });
+    _startUpdateTimer();
   }
 
   Future _updateStartTime() async {
@@ -163,8 +181,7 @@ class SetupAction extends _$SetupAction {
 
   Future<void> handleStop() async {
     startTime = null;
-    _updateTimer?.cancel();
-    _updateTimer = null;
+    pauseForegroundUpdates();
     await coreController.stopListener();
   }
 
