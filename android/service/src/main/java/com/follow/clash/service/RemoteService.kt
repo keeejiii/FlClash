@@ -7,6 +7,7 @@ import com.follow.clash.common.GlobalState
 import com.follow.clash.common.ServiceDelegate
 import com.follow.clash.common.chunkedForAidl
 import com.follow.clash.common.intent
+import com.follow.clash.common.startForegroundServiceCompat
 import com.follow.clash.core.Core
 import com.follow.clash.service.State.delegate
 import com.follow.clash.service.State.intent
@@ -51,6 +52,7 @@ class RemoteService : Service(),
                     false -> CommonService::class.intent
                 }
                 if (intent != nextIntent) {
+                    nextIntent.let { GlobalState.application.startForegroundServiceCompat(it) }
                     delegate?.unbind()
                     delegate = ServiceDelegate(nextIntent, ::handleServiceDisconnected) { binder ->
                         when (binder) {
