@@ -61,10 +61,6 @@ class ServicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
             handleStop(result)
         }
 
-        "updateNotificationSpeedText" -> {
-            handleUpdateNotificationSpeedText(call, result)
-        }
-
         else -> {
             result.notImplemented()
         }
@@ -115,22 +111,6 @@ class ServicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         launch {
             State.syncState()
             result.success("")
-        }
-    }
-
-    private fun handleUpdateNotificationSpeedText(call: MethodCall, result: MethodChannel.Result) {
-        val title = call.argument<String>("title") ?: "FlClash"
-        val stopText = call.argument<String>("stopText") ?: "STOP"
-        val onlyStatisticsProxy = call.argument<Boolean>("onlyStatisticsProxy") ?: false
-        val contentText = call.argument<String>("contentText") ?: ""
-        launch {
-            Service.updateNotificationSpeedText(
-                title = title,
-                stopText = stopText,
-                onlyStatisticsProxy = onlyStatisticsProxy,
-                contentText = contentText,
-            )
-            result.success(true)
         }
     }
 

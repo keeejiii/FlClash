@@ -81,21 +81,6 @@ class Service {
         '';
   }
 
-  Future<bool> updateNotificationSpeedText({
-    required String title,
-    required String stopText,
-    required bool onlyStatisticsProxy,
-    required String contentText,
-  }) async {
-    return await methodChannel.invokeMethod<bool>('updateNotificationSpeedText', {
-          'title': title,
-          'stopText': stopText,
-          'onlyStatisticsProxy': onlyStatisticsProxy,
-          'contentText': contentText,
-        }) ??
-        false;
-  }
-
   Future<bool> shutdown() async {
     return await methodChannel.invokeMethod<bool>('shutdown') ?? true;
   }

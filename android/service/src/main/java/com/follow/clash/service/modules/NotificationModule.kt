@@ -32,12 +32,11 @@ import kotlinx.coroutines.launch
 data class ExtendedNotificationParams(
     val title: String,
     val stopText: String,
-    val contentText: String,
 )
 
 val NotificationParams.extended: ExtendedNotificationParams
     get() = ExtendedNotificationParams(
-        title, stopText, contentText
+        title, stopText
     )
 
 class NotificationModule(private val service: Service) : Module() {
@@ -108,7 +107,7 @@ class NotificationModule(private val service: Service) : Module() {
         service.startForeground(
             with(notificationBuilder) {
                 setContentTitle(params.title)
-                setContentText(params.contentText)
+                setContentText(null)
                 clearActions()
                 addAction(
                     0, params.stopText, QuickAction.STOP.quickIntent.toPendingIntent

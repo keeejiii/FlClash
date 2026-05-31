@@ -121,7 +121,6 @@ object State {
             NotificationParams(
                 title = sharedState.currentProfileName,
                 stopText = sharedState.stopText,
-                onlyStatisticsProxy = sharedState.onlyStatisticsProxy
             )
         )
         Service.setCrashlytics(sharedState.crashlytics)
