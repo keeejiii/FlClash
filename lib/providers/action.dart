@@ -54,14 +54,16 @@ class CommonAction extends _$CommonAction {
     }
   }
 
-  Future<void> updateTraffic() async {
+  Future<void> updateTraffic({bool includeTotalTraffic = true}) async {
     final onlyStatisticsProxy = ref.read(
       appSettingProvider.select((state) => state.onlyStatisticsProxy),
     );
     final traffic = await coreController.getTraffic(onlyStatisticsProxy);
     ref.read(trafficsProvider.notifier).addTraffic(traffic);
-    ref.read(totalTrafficProvider.notifier).value = await coreController
-        .getTotalTraffic(onlyStatisticsProxy);
+    if (includeTotalTraffic) {
+      ref.read(totalTrafficProvider.notifier).value = await coreController
+          .getTotalTraffic(onlyStatisticsProxy);
+    }
   }
 
   Future<void> autoCheckUpdate() async {
@@ -112,13 +114,52 @@ class CommonAction extends _$CommonAction {
 
 @Riverpod(keepAlive: true)
 class SetupAction extends _$SetupAction {
+  static const _foregroundTrafficInterval = 2;
+  static const _backgroundTrafficInterval = 15;
+  static const _totalTrafficSampleInterval = 5;
+
   Timer? _updateTimer;
   DateTime? startTime;
+  int _trafficTick = 0;
+  int _totalTrafficTick = 0;
+  bool _trafficUpdating = false;
 
   bool get isStart => startTime != null && startTime!.isBeforeNow;
 
   @override
   void build() {}
+
+  bool _isForegroundActive() {
+    return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
+  Future<void> _maybeUpdateTraffic() async {
+    if (_trafficUpdating) return;
+    if (ref.read(suspendProvider)) return;
+    if (startTime == null) return;
+
+    final isForeground = _isForegroundActive();
+    final trafficInterval = isForeground
+        ? _foregroundTrafficInterval
+        : _backgroundTrafficInterval;
+
+    _trafficTick++;
+    if (_trafficTick % trafficInterval != 0) {
+      return;
+    }
+
+    _trafficUpdating = true;
+    try {
+      _totalTrafficTick++;
+      final includeTotalTraffic =
+          _totalTrafficTick % _totalTrafficSampleInterval == 0;
+      await ref.read(commonActionProvider.notifier).updateTraffic(
+        includeTotalTraffic: includeTotalTraffic,
+      );
+    } finally {
+      _trafficUpdating = false;
+    }
+  }
 
   SetupParams get _setupParams {
     final selectedMap = ref.read(selectedMapProvider);
@@ -138,15 +179,20 @@ class SetupAction extends _$SetupAction {
 
   Future<void> _handleStart() async {
     startTime ??= DateTime.now();
+    _trafficTick = 0;
+    _totalTrafficTick = 0;
+    _trafficUpdating = false;
     //The local status must be updated when performing the run task
     ref.read(commonActionProvider.notifier).updateRunTime();
-    ref.read(commonActionProvider.notifier).updateTraffic();
+    await ref
+        .read(commonActionProvider.notifier)
+        .updateTraffic(includeTotalTraffic: true);
     if (!ref.read(suspendProvider)) {
       await coreController.startListener();
     }
     _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       ref.read(commonActionProvider.notifier).updateRunTime();
-      ref.read(commonActionProvider.notifier).updateTraffic();
+      _maybeUpdateTraffic();
     });
   }
 
@@ -156,6 +202,9 @@ class SetupAction extends _$SetupAction {
 
   Future handleStop() async {
     startTime = null;
+    _trafficTick = 0;
+    _totalTrafficTick = 0;
+    _trafficUpdating = false;
     _updateTimer?.cancel();
     _updateTimer = null;
     await coreController.stopListener();
