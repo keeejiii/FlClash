@@ -14,19 +14,17 @@ import com.follow.clash.common.QuickAction
 import com.follow.clash.common.quickIntent
 import com.follow.clash.common.receiveBroadcastFlow
 import com.follow.clash.common.startForeground
-import com.follow.clash.common.tickerFlow
 import com.follow.clash.common.toPendingIntent
-import com.follow.clash.core.Core
 import com.follow.clash.service.R
 import com.follow.clash.service.State
 import com.follow.clash.service.models.NotificationParams
-import com.follow.clash.service.models.getSpeedTrafficText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
@@ -34,13 +32,12 @@ import kotlinx.coroutines.launch
 data class ExtendedNotificationParams(
     val title: String,
     val stopText: String,
-    val onlyStatisticsProxy: Boolean,
     val contentText: String,
 )
 
 val NotificationParams.extended: ExtendedNotificationParams
     get() = ExtendedNotificationParams(
-        title, stopText, onlyStatisticsProxy, Core.getSpeedTrafficText(onlyStatisticsProxy)
+        title, stopText, contentText
     )
 
 class NotificationModule(private val service: Service) : Module() {
@@ -58,13 +55,14 @@ class NotificationModule(private val service: Service) : Module() {
             }
 
             combine(
-                tickerFlow(1000, 0), State.notificationParamsFlow, screenFlow
-            ) { _, params, screenOn ->
-                params?.extended to screenOn
-            }.filter { (params, screenOn) -> params != null && screenOn }
-                .distinctUntilChanged { old, new -> old.first == new.first && old.second == new.second }
-                .collect { (params, _) ->
-                    update(params!!)
+                State.notificationParamsFlow.filterNotNull(), screenFlow
+            ) { params, screenOn ->
+                params.extended to screenOn
+            }.filter { (_, screenOn) -> screenOn }
+                .map { (params, _) -> params }
+                .distinctUntilChanged()
+                .collect { params ->
+                    update(params)
                 }
 
             State.notificationParamsFlow.value?.let {

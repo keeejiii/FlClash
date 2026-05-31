@@ -2,6 +2,7 @@ package com.follow.clash.service.modules
 
 import android.app.Service
 import android.content.Intent
+import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.getSystemService
 import com.follow.clash.common.receiveBroadcastFlow
@@ -43,6 +44,9 @@ class SuspendModule(private val service: Service) : Module() {
             val screenFlow = service.receiveBroadcastFlow {
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+                }
             }.map { intent ->
                 intent.action == Intent.ACTION_SCREEN_ON
             }.onStart {

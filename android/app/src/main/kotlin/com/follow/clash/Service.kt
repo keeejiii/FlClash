@@ -133,6 +133,22 @@ object Service {
         }
     }
 
+    suspend fun updateNotificationSpeedText(
+        title: String,
+        stopText: String,
+        onlyStatisticsProxy: Boolean,
+        contentText: String,
+    ): Result<Unit> {
+        return updateNotificationParams(
+            NotificationParams(
+                title = title,
+                stopText = stopText,
+                onlyStatisticsProxy = onlyStatisticsProxy,
+                contentText = contentText,
+            )
+        )
+    }
+
     suspend fun setCrashlytics(
         enable: Boolean
     ): Result<Unit> {

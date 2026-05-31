@@ -22,6 +22,11 @@ class CommonAction extends _$CommonAction {
   @override
   void build() {}
 
+  bool get _shouldUpdateForegroundStats {
+    if (!system.isAndroid) return true;
+    return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
   void updateStart() {
     ref
         .read(setupActionProvider.notifier)
@@ -44,6 +49,7 @@ class CommonAction extends _$CommonAction {
   }
 
   void updateRunTime() {
+    if (!_shouldUpdateForegroundStats) return;
     final startTime = ref.read(setupActionProvider.notifier).startTime;
     if (startTime != null) {
       final startTimeStamp = startTime.millisecondsSinceEpoch;
@@ -55,6 +61,7 @@ class CommonAction extends _$CommonAction {
   }
 
   Future<void> updateTraffic() async {
+    if (!_shouldUpdateForegroundStats) return;
     final onlyStatisticsProxy = ref.read(
       appSettingProvider.select((state) => state.onlyStatisticsProxy),
     );
@@ -62,6 +69,16 @@ class CommonAction extends _$CommonAction {
     ref.read(trafficsProvider.notifier).addTraffic(traffic);
     ref.read(totalTrafficProvider.notifier).value = await coreController
         .getTotalTraffic(onlyStatisticsProxy);
+
+    if (system.isAndroid) {
+      final sharedState = ref.read(sharedStateProvider);
+      await service?.updateNotificationSpeedText(
+        title: sharedState.currentProfileName,
+        stopText: sharedState.stopText,
+        onlyStatisticsProxy: sharedState.onlyStatisticsProxy,
+        contentText: traffic.speedText,
+      );
+    }
   }
 
   Future<void> autoCheckUpdate() async {
@@ -154,10 +171,19 @@ class SetupAction extends _$SetupAction {
     startTime = await service?.getRunTime();
   }
 
-  Future handleStop() async {
+  Future<void> handleStop() async {
     startTime = null;
     _updateTimer?.cancel();
     _updateTimer = null;
+    if (system.isAndroid) {
+      final sharedState = ref.read(sharedStateProvider);
+      await service?.updateNotificationSpeedText(
+        title: sharedState.currentProfileName,
+        stopText: sharedState.stopText,
+        onlyStatisticsProxy: sharedState.onlyStatisticsProxy,
+        contentText: '',
+      );
+    }
     await coreController.stopListener();
   }
 
