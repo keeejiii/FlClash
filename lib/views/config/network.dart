@@ -475,7 +475,6 @@ class NetworkListView extends StatelessWidget {
             const AllowBypassItem(),
             const Ipv6Item(),
             const DNSHijackingItem(),
-            const MtuItem(),
           ],
         ),
       if (system.isDesktop)
@@ -489,6 +488,7 @@ class NetworkListView extends StatelessWidget {
           if (system.isDesktop) const TUNItem(),
           if (system.isMacOS) const AutoSetSystemDnsItem(),
           const TunStackItem(),
+          if (!system.isDesktop) const MtuItem(),
           if (!system.isDesktop) ...[
             const RouteModeItem(),
             const RouteAddressItem(),
