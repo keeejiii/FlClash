@@ -56,6 +56,10 @@ class Requests extends _$Requests with AutoDisposeNotifierMixin {
   void addRequest(TrackerInfo value) {
     this.value = state.copyWith()..add(value);
   }
+
+  void clear() {
+    value = state.copyWith()..clear();
+  }
 }
 
 @Riverpod(keepAlive: true)
@@ -376,6 +380,12 @@ class NetworkDetection extends _$NetworkDetection
     debouncer.call(FunctionTag.checkIp, () {
       _checkIp();
     }, duration: commonDuration);
+  }
+
+  void clear() {
+    debouncer.cancel(FunctionTag.checkIp);
+    _resetCheckSession(null);
+    state = const NetworkDetectionState(isLoading: false, ipInfo: null);
   }
 
   Future<void> _checkIp() async {

@@ -86,7 +86,10 @@ class ApplicationState extends ConsumerState<Application> {
 
   void _autoUpdateProfilesTask() {
     _autoUpdateProfilesTaskTimer = Timer(const Duration(minutes: 20), () async {
-      await ref.read(profilesActionProvider.notifier).autoUpdateProfiles();
+      if (!system.isAndroid ||
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        await ref.read(profilesActionProvider.notifier).autoUpdateProfiles();
+      }
       _autoUpdateProfilesTask();
     });
   }

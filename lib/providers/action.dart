@@ -60,8 +60,8 @@ class CommonAction extends _$CommonAction {
     }
   }
 
-  Future<void> updateTraffic() async {
-    if (!_shouldUpdateForegroundStats) return;
+  Future<void> updateTraffic({bool force = false}) async {
+    if (!force && !_shouldUpdateForegroundStats) return;
     final onlyStatisticsProxy = ref.read(
       appSettingProvider.select((state) => state.onlyStatisticsProxy),
     );
@@ -119,11 +119,16 @@ class CommonAction extends _$CommonAction {
 
 @Riverpod(keepAlive: true)
 class SetupAction extends _$SetupAction {
+  static const _backgroundTrafficUpdateInterval = Duration(seconds: 30);
+
   Timer? _updateTimer;
+  Timer? _backgroundTrafficTimer;
   DateTime? startTime;
 
   bool get isStart => startTime != null && startTime!.isBeforeNow;
   bool get _hasActiveUpdateTimer => _updateTimer?.isActive ?? false;
+  bool get _hasActiveBackgroundTrafficTimer =>
+      _backgroundTrafficTimer?.isActive ?? false;
 
   @override
   void build() {}
@@ -146,18 +151,36 @@ class SetupAction extends _$SetupAction {
 
   void _startUpdateTimer() {
     if (_hasActiveUpdateTimer || !isStart) return;
+    _backgroundTrafficTimer?.cancel();
+    _backgroundTrafficTimer = null;
     _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       ref.read(commonActionProvider.notifier).updateRunTime();
       ref.read(commonActionProvider.notifier).updateTraffic();
     });
   }
 
+  void _startBackgroundTrafficTimer() {
+    if (!system.isAndroid || _hasActiveBackgroundTrafficTimer || !isStart) {
+      return;
+    }
+    ref.read(commonActionProvider.notifier).updateTraffic(force: true);
+    _backgroundTrafficTimer = Timer.periodic(
+      _backgroundTrafficUpdateInterval,
+      (_) {
+        ref.read(commonActionProvider.notifier).updateTraffic(force: true);
+      },
+    );
+  }
+
   void pauseForegroundUpdates() {
     _updateTimer?.cancel();
     _updateTimer = null;
+    _startBackgroundTrafficTimer();
   }
 
   void resumeForegroundUpdates() {
+    _backgroundTrafficTimer?.cancel();
+    _backgroundTrafficTimer = null;
     if (!isStart) return;
     ref.read(commonActionProvider.notifier).updateRunTime();
     ref.read(commonActionProvider.notifier).updateTraffic();
@@ -182,6 +205,8 @@ class SetupAction extends _$SetupAction {
   Future<void> handleStop() async {
     startTime = null;
     pauseForegroundUpdates();
+    _backgroundTrafficTimer?.cancel();
+    _backgroundTrafficTimer = null;
     await coreController.stopListener();
   }
 
@@ -746,7 +771,15 @@ class ProxiesAction extends _$ProxiesAction {
   @override
   void build() {}
 
+  bool get _shouldUpdateForegroundProxyUi {
+    if (!system.isAndroid) return true;
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    return lifecycleState == null ||
+        lifecycleState == AppLifecycleState.resumed;
+  }
+
   void updateGroupsDebounce([Duration? duration]) {
+    if (!_shouldUpdateForegroundProxyUi) return;
     debouncer.call(FunctionTag.updateGroups, updateGroups, duration: duration);
   }
 
@@ -761,6 +794,7 @@ class ProxiesAction extends _$ProxiesAction {
   }
 
   Future<void> updateGroups() async {
+    if (!_shouldUpdateForegroundProxyUi) return;
     try {
       commonPrint.log('updateGroups');
       ref.read(groupsProvider.notifier).value = await retry(

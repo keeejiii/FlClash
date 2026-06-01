@@ -90,12 +90,24 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
       setupAction.resumeForegroundUpdates();
       permissions.check();
       render?.resume();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         ref.read(systemActionProvider.notifier).updateLocalIp();
         ref.read(checkIpNumProvider.notifier).add();
         ref.read(setupActionProvider.notifier).tryCheckIp();
         if (system.isAndroid) {
-          ref.read(coreActionProvider.notifier).tryStartCore();
+          try {
+            await ref.read(coreActionProvider.notifier).tryStartCore();
+          } catch (e) {
+            commonPrint.log('resume core check error: $e');
+          }
+          try {
+            await ref.read(providersProvider.notifier).syncProviders();
+          } catch (e) {
+            commonPrint.log('resume providers sync error: $e');
+          }
+          ref
+              .read(proxiesActionProvider.notifier)
+              .updateGroupsDebounce(Duration.zero);
         }
       });
       return;
@@ -107,6 +119,16 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
         setupAction.pauseForegroundUpdates();
+        if (system.isAndroid && state != AppLifecycleState.inactive) {
+          debouncer.cancel(FunctionTag.updateGroups);
+          ref.read(requestsProvider.notifier).clear();
+          ref.read(delayDataSourceProvider.notifier).value = {};
+          ref.read(groupsProvider.notifier).value = [];
+          ref.read(providersProvider.notifier).value = [];
+          ref.read(packagesProvider.notifier).value = [];
+          ref.read(localIpProvider.notifier).value = null;
+          ref.read(networkDetectionProvider.notifier).clear();
+        }
         break;
       case AppLifecycleState.resumed:
         break;

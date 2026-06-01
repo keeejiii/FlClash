@@ -16,12 +16,16 @@ class RequestsView extends ConsumerStatefulWidget {
   ConsumerState<RequestsView> createState() => _RequestsViewState();
 }
 
-class _RequestsViewState extends ConsumerState<RequestsView> {
+class _RequestsViewState extends ConsumerState<RequestsView>
+    with WidgetsBindingObserver {
   final _requestsStateNotifier = ValueNotifier<TrackerInfosState>(
     const TrackerInfosState(),
   );
   List<TrackerInfo> _requests = [];
   late final ScrollController _scrollController;
+
+  bool get _isUiActive =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
   void _onSearch(String value) {
     _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
@@ -38,6 +42,7 @@ class _RequestsViewState extends ConsumerState<RequestsView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _requests = ref.read(requestsProvider).list;
     _scrollController = ScrollController(initialScrollOffset: double.maxFinite);
     _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
@@ -47,13 +52,34 @@ class _RequestsViewState extends ConsumerState<RequestsView> {
       prev,
       next,
     ) {
+      if (!_isUiActive) {
+        return;
+      }
       _requests = next.a;
       updateRequestsThrottler();
     });
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _requests = ref.read(requestsProvider).list;
+      _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
+        trackerInfos: _requests,
+      );
+      return;
+    }
+    if (state != AppLifecycleState.inactive) {
+      _requests = [];
+      _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
+        trackerInfos: [],
+      );
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _requestsStateNotifier.dispose();
     _scrollController.dispose();
     super.dispose();

@@ -22,12 +22,14 @@ class CoreEventManager {
 
   bool _shouldSkipEventInBackground(CoreEventType type) {
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
-    if (lifecycleState == AppLifecycleState.resumed) {
+    if (lifecycleState == null ||
+        lifecycleState == AppLifecycleState.resumed) {
       return false;
     }
     return switch (type) {
-      CoreEventType.delay || CoreEventType.request => true,
-      CoreEventType.log || CoreEventType.loaded || CoreEventType.crash => false,
+      CoreEventType.delay || CoreEventType.request || CoreEventType.loaded =>
+        true,
+      CoreEventType.log || CoreEventType.crash => false,
     };
   }
 

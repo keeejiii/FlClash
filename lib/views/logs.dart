@@ -39,10 +39,11 @@ class _LogsViewState extends ConsumerState<LogsView>
       if (prev != next) {
         final isEquality = logListEquality.equals(prev?.a, next.a);
         if (!isEquality) {
-          _logs = next.a;
-          if (_isUiActive) {
-            updateLogsThrottler();
+          if (!_isUiActive) {
+            return;
           }
+          _logs = next.a;
+          updateLogsThrottler();
         }
       }
     });
@@ -51,7 +52,13 @@ class _LogsViewState extends ConsumerState<LogsView>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _logs = ref.read(logsProvider).list;
       _logsStateNotifier.value = _logsStateNotifier.value.copyWith(logs: _logs);
+      return;
+    }
+    if (state != AppLifecycleState.inactive) {
+      _logs = [];
+      _logsStateNotifier.value = _logsStateNotifier.value.copyWith(logs: []);
     }
   }
 

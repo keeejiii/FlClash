@@ -18,7 +18,8 @@ class AccessView extends ConsumerStatefulWidget {
   ConsumerState<AccessView> createState() => _AccessViewState();
 }
 
-class _AccessViewState extends ConsumerState<AccessView> {
+class _AccessViewState extends ConsumerState<AccessView>
+    with WidgetsBindingObserver {
   final GlobalKey<CommonScaffoldState> _scaffoldKey = GlobalKey();
   late ScrollController _controller;
   List<String>? _pinedList;
@@ -30,6 +31,7 @@ class _AccessViewState extends ConsumerState<AccessView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = ScrollController();
     _completer.complete(ref.read(systemActionProvider.notifier).getPackages());
     final accessControl = ref
@@ -43,8 +45,18 @@ class _AccessViewState extends ConsumerState<AccessView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed ||
+        ref.read(packagesProvider).isNotEmpty) {
+      return;
+    }
+    ref.read(systemActionProvider.notifier).getPackages();
   }
 
   Widget _buildSelectedAllButton({

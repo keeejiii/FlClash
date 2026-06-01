@@ -90,6 +90,10 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
       return;
     }
     _cancelUpdateTimer();
+    if (state != AppLifecycleState.inactive) {
+      _connectionsStateNotifier.value = _connectionsStateNotifier.value
+          .copyWith(trackerInfos: []);
+    }
   }
 
   Future<void> _updateConnections() async {
