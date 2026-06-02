@@ -36,7 +36,7 @@ class _HomeLifecycleContainer extends StatelessWidget {
         }
         return const _BackgroundHomeShell();
       },
-      child: widget.child,
+      child: child,
     );
   }
 }
