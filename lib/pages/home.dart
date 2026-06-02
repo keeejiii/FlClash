@@ -15,6 +15,84 @@ typedef OnSelected = void Function(int index);
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
+  @override
+  Widget build(BuildContext context) {
+    return const _HomeLifecycleContainer(child: _HomeForegroundShell());
+  }
+}
+
+class _HomeLifecycleContainer extends StatefulWidget {
+  final Widget child;
+
+  const _HomeLifecycleContainer({required this.child});
+
+  @override
+  State<_HomeLifecycleContainer> createState() =>
+      _HomeLifecycleContainerState();
+}
+
+class _HomeLifecycleContainerState extends State<_HomeLifecycleContainer>
+    with WidgetsBindingObserver {
+  late bool _showForegroundUi = _shouldShowForegroundUi(
+    WidgetsBinding.instance.lifecycleState,
+  );
+
+  bool _shouldShowForegroundUi(AppLifecycleState? state) {
+    if (!system.isAndroid) return true;
+    return switch (state) {
+      AppLifecycleState.hidden ||
+      AppLifecycleState.paused ||
+      AppLifecycleState.detached => false,
+      AppLifecycleState.inactive ||
+      AppLifecycleState.resumed ||
+      null => true,
+    };
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final showForegroundUi = _shouldShowForegroundUi(state);
+    if (showForegroundUi == _showForegroundUi) {
+      return;
+    }
+    setState(() {
+      _showForegroundUi = showForegroundUi;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_showForegroundUi) {
+      return widget.child;
+    }
+    return const _BackgroundHomeShell();
+  }
+}
+
+class _BackgroundHomeShell extends StatelessWidget {
+  const _BackgroundHomeShell();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(color: context.colorScheme.surface);
+  }
+}
+
+class _HomeForegroundShell extends StatelessWidget {
+  const _HomeForegroundShell();
+
   void _handleToPage(PageLabel pageLabel) {
     globalState.container
         .read(currentPageLabelProvider.notifier)
