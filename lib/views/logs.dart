@@ -22,16 +22,31 @@ class _LogsViewState extends ConsumerState<LogsView>
 
   List<Log> _logs = [];
 
+  bool get _isCurrentPage => ref.read(isCurrentPageProvider(PageLabel.logs));
+
   bool get _isUiActive =>
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  bool get _isViewActive => _isUiActive && _isCurrentPage;
+
+  void _syncLogsFromStore() {
+    _logs = ref.read(logsProvider).list;
+    _logsStateNotifier.value = _logsStateNotifier.value.copyWith(logs: _logs);
+  }
+
+  void _clearRenderedLogs() {
+    _logs = [];
+    _logsStateNotifier.value = _logsStateNotifier.value.copyWith(logs: []);
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _logs = ref.read(logsProvider).list;
     _scrollController = ScrollController(initialScrollOffset: double.maxFinite);
-    _logsStateNotifier.value = _logsStateNotifier.value.copyWith(logs: _logs);
+    if (_isViewActive) {
+      _syncLogsFromStore();
+    }
     ref.listenManual(logsProvider.select((state) => VM(state.list)), (
       prev,
       next,
@@ -39,7 +54,7 @@ class _LogsViewState extends ConsumerState<LogsView>
       if (prev != next) {
         final isEquality = logListEquality.equals(prev?.a, next.a);
         if (!isEquality) {
-          if (!_isUiActive) {
+          if (!_isViewActive) {
             return;
           }
           _logs = next.a;
@@ -47,18 +62,28 @@ class _LogsViewState extends ConsumerState<LogsView>
         }
       }
     });
+    ref.listenManual(currentPageLabelProvider, (prev, next) {
+      final wasCurrent = prev == PageLabel.logs;
+      final isCurrent = next == PageLabel.logs;
+      if (wasCurrent == isCurrent) {
+        return;
+      }
+      if (isCurrent && _isUiActive) {
+        _syncLogsFromStore();
+      } else {
+        _clearRenderedLogs();
+      }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _logs = ref.read(logsProvider).list;
-      _logsStateNotifier.value = _logsStateNotifier.value.copyWith(logs: _logs);
+    if (state == AppLifecycleState.resumed && _isCurrentPage) {
+      _syncLogsFromStore();
       return;
     }
     if (state != AppLifecycleState.inactive) {
-      _logs = [];
-      _logsStateNotifier.value = _logsStateNotifier.value.copyWith(logs: []);
+      _clearRenderedLogs();
     }
   }
 

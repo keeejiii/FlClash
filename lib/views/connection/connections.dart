@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/controller.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,8 +28,20 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
 
   Timer? timer;
 
+  bool get _isCurrentPage => ref.read(
+    isCurrentPageProvider(PageLabel.connections),
+  );
+
   bool get _isUiActive =>
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  bool get _isViewActive => _isUiActive && _isCurrentPage;
+
+  void _clearRenderedConnections() {
+    _connectionsStateNotifier.value = _connectionsStateNotifier.value.copyWith(
+      trackerInfos: [],
+    );
+  }
 
   List<Widget> _buildActions() {
     return [
@@ -59,12 +73,12 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
   }
 
   Future<void> _updateConnectionsTask() async {
-    if (!_isUiActive) {
+    if (!_isViewActive) {
       _cancelUpdateTimer();
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || !_isUiActive) {
+      if (!mounted || !_isViewActive) {
         _cancelUpdateTimer();
         return;
       }
@@ -80,19 +94,33 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _updateConnectionsTask();
+    if (_isViewActive) {
+      _updateConnectionsTask();
+    }
+    ref.listenManual(currentPageLabelProvider, (prev, next) {
+      final wasCurrent = prev == PageLabel.connections;
+      final isCurrent = next == PageLabel.connections;
+      if (wasCurrent == isCurrent) {
+        return;
+      }
+      if (isCurrent && _isUiActive) {
+        _updateConnectionsTask();
+      } else {
+        _cancelUpdateTimer();
+        _clearRenderedConnections();
+      }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed && _isCurrentPage) {
       _updateConnectionsTask();
       return;
     }
     _cancelUpdateTimer();
     if (state != AppLifecycleState.inactive) {
-      _connectionsStateNotifier.value = _connectionsStateNotifier.value
-          .copyWith(trackerInfos: []);
+      _clearRenderedConnections();
     }
   }
 

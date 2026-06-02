@@ -24,8 +24,28 @@ class _RequestsViewState extends ConsumerState<RequestsView>
   List<TrackerInfo> _requests = [];
   late final ScrollController _scrollController;
 
+  bool get _isCurrentPage => ref.read(
+    isCurrentPageProvider(PageLabel.requests),
+  );
+
   bool get _isUiActive =>
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  bool get _isViewActive => _isUiActive && _isCurrentPage;
+
+  void _syncRequestsFromStore() {
+    _requests = ref.read(requestsProvider).list;
+    _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
+      trackerInfos: _requests,
+    );
+  }
+
+  void _clearRenderedRequests() {
+    _requests = [];
+    _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
+      trackerInfos: [],
+    );
+  }
 
   void _onSearch(String value) {
     _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
@@ -43,37 +63,42 @@ class _RequestsViewState extends ConsumerState<RequestsView>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _requests = ref.read(requestsProvider).list;
     _scrollController = ScrollController(initialScrollOffset: double.maxFinite);
-    _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
-      trackerInfos: _requests,
-    );
+    if (_isViewActive) {
+      _syncRequestsFromStore();
+    }
     ref.listenManual(requestsProvider.select((state) => VM(state.list)), (
       prev,
       next,
     ) {
-      if (!_isUiActive) {
+      if (!_isViewActive) {
         return;
       }
       _requests = next.a;
       updateRequestsThrottler();
     });
+    ref.listenManual(currentPageLabelProvider, (prev, next) {
+      final wasCurrent = prev == PageLabel.requests;
+      final isCurrent = next == PageLabel.requests;
+      if (wasCurrent == isCurrent) {
+        return;
+      }
+      if (isCurrent && _isUiActive) {
+        _syncRequestsFromStore();
+      } else {
+        _clearRenderedRequests();
+      }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _requests = ref.read(requestsProvider).list;
-      _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
-        trackerInfos: _requests,
-      );
+    if (state == AppLifecycleState.resumed && _isCurrentPage) {
+      _syncRequestsFromStore();
       return;
     }
     if (state != AppLifecycleState.inactive) {
-      _requests = [];
-      _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
-        trackerInfos: [],
-      );
+      _clearRenderedRequests();
     }
   }
 

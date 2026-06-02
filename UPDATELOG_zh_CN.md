@@ -27,7 +27,7 @@
 本轮改动分成四个阶段：
 
 ### 阶段 1：后台统计与通知收紧
-- 后台不再无意义刷新 traffic / totalTraffic
+- 后台不再每秒刷新 traffic / totalTraffic，改为低频补采样
 - 去掉通知栏实时 speed
 - 移除 speed 通知更新链路
 - 补 Doze 状态监听
@@ -42,7 +42,8 @@
 
 ### 阶段 4（3C-lite）：后台丢弃高频 UI 事件
 - 后台不再分发 `delay` / `request` 这类高频 UI 事件
-- 保留 `log` / `loaded` / `crash`，且日志不做等级过滤
+- 保留 `log` / `crash`，后台跳过 `loaded`
+- 日志 / 请求 / 连接 / network detection 这类重 UI 页面，只在当前页实际可见时继续刷新显示层
 
 ---
 
@@ -85,14 +86,16 @@
 
 ### 1.3 实际做法
 
-#### A. 后台不再无意义刷新 traffic
+#### A. 后台不再每秒刷新 traffic
 在 `lib/providers/action.dart` 中：
 
 - 为 Android 增加前后台判断
-- 非前台时直接跳过 `updateTraffic()` 和 `updateRunTime()` 的更新路径
+- 非前台时停止每秒 foreground timer
+- 改为保留一个 30 秒一次的后台 `updateTraffic(force: true)` 低频补采样
 
 效果：
 - 后台时不再每秒去拉 `traffic / totalTraffic`
+- 仍保留低频后台流量采样，避免回前台后流量统计断层
 - 但不影响代理本身运行
 
 #### B. 去掉 speed 通知栏
@@ -141,7 +144,7 @@
 
 ### 2.1 目标
 
-阶段 1 完成后，后台虽然已经不再更新 traffic，但 periodic timer 仍然存在：
+阶段 1 完成后，后台虽然已经不再每秒更新 traffic，但 periodic timer 仍然存在：
 
 - 每秒触发一次 Dart 层 timer
 - 只是进入后很快 return
@@ -324,37 +327,47 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 
 保留：
 - `CoreEventType.log`
-- `CoreEventType.loaded`
 - `CoreEventType.crash`
 
-同时，页面级的明显 UI 刷新残口也进一步接入 lifecycle：
+同时，页面级的明显 UI 刷新残口也进一步收紧为“当前页可见才运行”：
 
-- `ConnectionsView` 的 1 秒 `getConnections()` 轮询，在后台直接停止，回前台再恢复
-- `LogsView` 的显示刷新层，在后台不再继续推动 `_logsStateNotifier`，但日志采集与保留本身不受影响，回前台后再一次性同步显示
+- `ConnectionsView` 的 1 秒 `getConnections()` 轮询，不在当前页或后台时直接停止，回到当前页再恢复
+- `RequestsView` 的显示刷新层，不在当前页或后台时不再继续推动 `_requestsStateNotifier`
+- `LogsView` 的显示刷新层，不在当前页或后台时不再继续推动 `_logsStateNotifier`，但日志采集与保留本身不受影响，回到当前页后再同步显示
+- `networkDetection` 的触发条件收紧为“仪表盘当前可见”，离开仪表盘就清空 UI 状态，回到仪表盘再重新检测
 
-这里的设计原则不是“按页面缩减前台 UI”，而是：
+这里的设计原则不是“把前台体验砍残”，而是：
 
-> **前台 UI 完整，后台 UI 静默；运行层与日志保留。**
+> **当前页 UI 完整，不可见页静默；后台 UI 静默；运行层与日志保留。**
 
 ### 4.5 收益
 
 - 后台不再消费高频 UI 事件
 - 连对应的事件反序列化成本也能省一点
 - crash 事件保留，不影响后台异常感知
-- loaded/log 保留，不破坏必要状态同步、调试和错误暴露
-- 连接页轮询和日志页显示层也进一步纳入后台静默，更接近“后台只留服务与日志链路”的目标
-- 规则更统一：前台完整、后台静默，不再引入额外的页面级运行策略
+- log 保留，不影响后台调试和错误暴露
+- `loaded` 在后台直接跳过，避免为不可见页面维持 provider / group 同步抖动
+- 连接页轮询、请求页和日志页显示层、network detection 都进一步纳入“不可见即静默”
+- 规则更统一：当前页完整、不可见页静默、后台静默
 
 ### 4.6 风险与取舍
 
 - 后台时 request / delay 等前台专属 UI 数据不会继续增长
+- 不在当前页时，日志 / 请求 / 连接这些页面的显示层状态不会持续维护
 - 这是预期行为：后台不再为不可见 UI 持续加工高频数据
 - 日志保留全部等级（debug / info / warning / error），用于后台调试与排障
-- 没有继续采用“前台按页面细分 UI 工作”的策略，以降低规则复杂度和后续维护成本
+- 当前页恢复时会重新从 provider / core 同步最新可见数据，以换取不可见期的更低 churn
 
 ### 4.7 对应提交
 
 - `bcb1ff0` `perf(android): skip ui-heavy core events while app is backgrounded`
+
+### 4.8 当前工作树继续补充（未提交）
+
+- `LogsView`：只有当前页可见时才同步 `_logsStateNotifier`
+- `RequestsView`：只有当前页可见时才同步 `_requestsStateNotifier`
+- `ConnectionsView`：只有当前页可见时才维持 1 秒轮询
+- `AppStateManager`：`networkDetection` 只有仪表盘当前可见时才触发；离开仪表盘即清空 UI 状态
 
 ---
 
@@ -362,19 +375,19 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 
 到当前版本为止，这个 fork 已经形成了一套 **Android 后台减活跃方案**：
 
-1. **后台不再无意义刷新 traffic**
+1. **后台不再每秒刷新 traffic，而是保留低频补采样**
 2. **后台真正停 foreground timer**
 3. **切网后主动清理旧连接**
 4. **后台不再消费高频 UI 事件**
-5. **连接页轮询纳入 lifecycle 静默**
-6. **日志页显示层纳入 lifecycle 静默，但日志链路完整保留**
+5. **连接页 / 请求页 / 日志页只在当前页可见时更新显示层**
+6. **network detection 只在仪表盘当前可见时触发**
 7. **通知栏回退静态前台 service 形态**
 8. **日志在前后台都完整保留**
 9. **Doze 监听补齐**
 
 这套方案的特点不是“激进智能保活”或“智能暂停代理”，而是：
 
-> **前台 UI 完整、后台 UI 静默，同时尽量不伤害 VPN / service 主链路。**
+> **当前页 UI 完整、不可见页静默、后台 UI 静默，同时尽量不伤害 VPN / service 主链路。**
 
 ---
 

@@ -55,8 +55,25 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
     WidgetsBinding.instance.addObserver(this);
     foregroundUiController.addListener(_handleForegroundUiStateChanged);
     ref.listenManual(checkIpProvider, (prev, next) {
-      if (prev != next && next.a && next.c && _isUiActive) {
+      final isDashboardCurrent = ref.read(
+        isCurrentPageProvider(PageLabel.dashboard),
+      );
+      if (prev != next && next.a && next.c && _isUiActive && isDashboardCurrent) {
         ref.read(networkDetectionProvider.notifier).startCheck();
+      }
+    });
+    ref.listenManual(currentPageLabelProvider, (prev, next) {
+      if (prev == next) {
+        return;
+      }
+      final networkDetection = ref.read(networkDetectionProvider.notifier);
+      if (prev == PageLabel.dashboard) {
+        networkDetection.clear();
+      }
+      if (next == PageLabel.dashboard &&
+          _isUiActive &&
+          ref.read(checkIpProvider).c) {
+        networkDetection.startCheck();
       }
     });
     ref.listenManual(configProvider, (prev, next) {
