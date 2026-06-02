@@ -21,63 +21,23 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class _HomeLifecycleContainer extends StatefulWidget {
+class _HomeLifecycleContainer extends StatelessWidget {
   final Widget child;
 
   const _HomeLifecycleContainer({required this.child});
 
   @override
-  State<_HomeLifecycleContainer> createState() =>
-      _HomeLifecycleContainerState();
-}
-
-class _HomeLifecycleContainerState extends State<_HomeLifecycleContainer>
-    with WidgetsBindingObserver {
-  late bool _showForegroundUi = _shouldShowForegroundUi(
-    WidgetsBinding.instance.lifecycleState,
-  );
-
-  bool _shouldShowForegroundUi(AppLifecycleState? state) {
-    if (!system.isAndroid) return true;
-    return switch (state) {
-      AppLifecycleState.hidden ||
-      AppLifecycleState.paused ||
-      AppLifecycleState.detached => false,
-      AppLifecycleState.inactive ||
-      AppLifecycleState.resumed ||
-      null => true,
-    };
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final showForegroundUi = _shouldShowForegroundUi(state);
-    if (showForegroundUi == _showForegroundUi) {
-      return;
-    }
-    setState(() {
-      _showForegroundUi = showForegroundUi;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_showForegroundUi) {
-      return widget.child;
-    }
-    return const _BackgroundHomeShell();
+    return ValueListenableBuilder<bool>(
+      valueListenable: foregroundUiController,
+      builder: (_, isForegroundUiActive, child) {
+        if (isForegroundUiActive) {
+          return child!;
+        }
+        return const _BackgroundHomeShell();
+      },
+      child: widget.child,
+    );
   }
 }
 

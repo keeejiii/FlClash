@@ -86,8 +86,7 @@ class ApplicationState extends ConsumerState<Application> {
 
   void _autoUpdateProfilesTask() {
     _autoUpdateProfilesTaskTimer = Timer(const Duration(minutes: 20), () async {
-      if (!system.isAndroid ||
-          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      if (foregroundUiController.isForegroundUiActive) {
         await ref.read(profilesActionProvider.notifier).autoUpdateProfiles();
       }
       _autoUpdateProfilesTask();
@@ -95,8 +94,7 @@ class ApplicationState extends ConsumerState<Application> {
   }
 
   bool get _shouldUpdateForegroundNetworkUi {
-    if (!system.isAndroid) return true;
-    return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    return foregroundUiController.isForegroundUiActive;
   }
 
   ConnectivityResult _getPrimaryConnectivity(List<ConnectivityResult> results) {

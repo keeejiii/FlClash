@@ -1,9 +1,9 @@
 import 'dart:async';
 
+import 'package:fl_clash/common/lifecycle.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 
 abstract mixin class CoreEventListener {
   void onLog(Log log) {}
@@ -21,9 +21,7 @@ class CoreEventManager {
   final _controller = StreamController<CoreEvent>();
 
   bool _shouldSkipEventInBackground(CoreEventType type) {
-    final lifecycleState = WidgetsBinding.instance.lifecycleState;
-    if (lifecycleState == null ||
-        lifecycleState == AppLifecycleState.resumed) {
+    if (foregroundUiController.isForegroundUiActive) {
       return false;
     }
     return switch (type) {

@@ -23,8 +23,7 @@ class CommonAction extends _$CommonAction {
   void build() {}
 
   bool get _shouldUpdateForegroundStats {
-    if (!system.isAndroid) return true;
-    return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    return foregroundUiController.isForegroundUiActive;
   }
 
   void updateStart() {
@@ -772,10 +771,7 @@ class ProxiesAction extends _$ProxiesAction {
   void build() {}
 
   bool get _shouldUpdateForegroundProxyUi {
-    if (!system.isAndroid) return true;
-    final lifecycleState = WidgetsBinding.instance.lifecycleState;
-    return lifecycleState == null ||
-        lifecycleState == AppLifecycleState.resumed;
+    return foregroundUiController.isForegroundUiActive;
   }
 
   void updateGroupsDebounce([Duration? duration]) {

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/controller.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -22,13 +20,40 @@ class AppStateManager extends ConsumerStatefulWidget {
 
 class _AppStateManagerState extends ConsumerState<AppStateManager>
     with WidgetsBindingObserver {
+  bool _needsAndroidForegroundRecovery = false;
+
   bool get _isUiActive =>
-      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      foregroundUiController.isForegroundUiActive;
+
+  void _clearAndroidBackgroundUiState(ProviderContainer container) {
+    debouncer.cancel(FunctionTag.updateGroups);
+    container.read(requestsProvider.notifier).clear();
+    container.read(delayDataSourceProvider.notifier).value = {};
+    container.read(groupsProvider.notifier).value = [];
+    container.read(providersProvider.notifier).value = [];
+    container.read(packagesProvider.notifier).value = [];
+    container.read(localIpProvider.notifier).value = null;
+    container.read(networkDetectionProvider.notifier).clear();
+  }
+
+  void _handleForegroundUiStateChanged() {
+    if (!mounted ||
+        !system.isAndroid ||
+        foregroundUiController.isForegroundUiActive ||
+        foregroundUiController.lifecycleState != AppLifecycleState.inactive) {
+      return;
+    }
+    _needsAndroidForegroundRecovery = true;
+    final container = globalState.container;
+    container.read(setupActionProvider.notifier).pauseForegroundUpdates();
+    _clearAndroidBackgroundUiState(container);
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    foregroundUiController.addListener(_handleForegroundUiStateChanged);
     ref.listenManual(checkIpProvider, (prev, next) {
       if (prev != next && next.a && next.c && _isUiActive) {
         ref.read(networkDetectionProvider.notifier).startCheck();
@@ -77,6 +102,7 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
 
   @override
   void dispose() {
+    foregroundUiController.removeListener(_handleForegroundUiStateChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -84,28 +110,30 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
   @override
   Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     commonPrint.log('$state');
-    final ref = globalState.container;
-    final setupAction = ref.read(setupActionProvider.notifier);
+    final container = globalState.container;
+    final setupAction = container.read(setupActionProvider.notifier);
     if (state == AppLifecycleState.resumed) {
+      final shouldRecoverAndroidUi = _needsAndroidForegroundRecovery;
+      _needsAndroidForegroundRecovery = false;
       setupAction.resumeForegroundUpdates();
       permissions.check();
       render?.resume();
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        ref.read(systemActionProvider.notifier).updateLocalIp();
-        ref.read(checkIpNumProvider.notifier).add();
-        ref.read(setupActionProvider.notifier).tryCheckIp();
-        if (system.isAndroid) {
+        container.read(systemActionProvider.notifier).updateLocalIp();
+        container.read(checkIpNumProvider.notifier).add();
+        container.read(setupActionProvider.notifier).tryCheckIp();
+        if (system.isAndroid && shouldRecoverAndroidUi) {
           try {
-            await ref.read(coreActionProvider.notifier).tryStartCore();
+            await container.read(coreActionProvider.notifier).tryStartCore();
           } catch (e) {
             commonPrint.log('resume core check error: $e');
           }
           try {
-            await ref.read(providersProvider.notifier).syncProviders();
+            await container.read(providersProvider.notifier).syncProviders();
           } catch (e) {
             commonPrint.log('resume providers sync error: $e');
           }
-          ref
+          container
               .read(proxiesActionProvider.notifier)
               .updateGroupsDebounce(Duration.zero);
         }
@@ -115,19 +143,14 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
 
     switch (state) {
       case AppLifecycleState.inactive:
+        break;
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
         setupAction.pauseForegroundUpdates();
-        if (system.isAndroid && state != AppLifecycleState.inactive) {
-          debouncer.cancel(FunctionTag.updateGroups);
-          ref.read(requestsProvider.notifier).clear();
-          ref.read(delayDataSourceProvider.notifier).value = {};
-          ref.read(groupsProvider.notifier).value = [];
-          ref.read(providersProvider.notifier).value = [];
-          ref.read(packagesProvider.notifier).value = [];
-          ref.read(localIpProvider.notifier).value = null;
-          ref.read(networkDetectionProvider.notifier).clear();
+        if (system.isAndroid) {
+          _needsAndroidForegroundRecovery = true;
+          _clearAndroidBackgroundUiState(container);
         }
         break;
       case AppLifecycleState.resumed:

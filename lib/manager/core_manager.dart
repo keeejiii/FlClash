@@ -103,7 +103,7 @@ class _CoreContainerState extends ConsumerState<CoreManager>
       return;
     }
     ref.read(coreStatusProvider.notifier).value = CoreStatus.disconnected;
-    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+    if (foregroundUiController.isForegroundUiActive) {
       context.showNotifier(message);
     }
     await coreController.shutdown(false);
