@@ -27,7 +27,7 @@ class _AccessViewState extends ConsumerState<AccessView> {
   Future<List<Package>>? _packagesFuture;
 
   bool get _isViewActive => ref.read(
-    isForegroundPageActiveProvider(PageLabel.access),
+    isForegroundPageActiveProvider(PageLabel.tools),
   );
 
   void _ensurePackagesLoaded() {
@@ -60,7 +60,7 @@ class _AccessViewState extends ConsumerState<AccessView> {
   void initState() {
     super.initState();
     _controller = ScrollController();
-    ref.listenManual(isForegroundPageActiveProvider(PageLabel.access), (
+    ref.listenManual(isForegroundPageActiveProvider(PageLabel.tools), (
       prev,
       next,
     ) {
