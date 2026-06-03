@@ -76,7 +76,7 @@ class ApplicationState extends ConsumerState<Application> {
               ),
             ),
             TextSpan(text: currentAppLocalizations.createProfile),
-          ],
+            ],
         ),
       );
       if (res != true) return;
@@ -181,7 +181,7 @@ class ApplicationState extends ConsumerState<Application> {
             commonPrint.log('connectivityChanged ${results.toString()}');
             _handleAndroidNetworkChange(results);
             _updateForegroundNetworkUi(results);
-          },
+            },
           child: child,
         ),
       ),
@@ -207,16 +207,19 @@ class ApplicationState extends ConsumerState<Application> {
           appSettingProvider.select((state) => state.locale),
         );
         final themeProps = ref.watch(themeSettingProvider);
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          navigatorKey: globalState.navigatorKey,
-          localizationsDelegates: const [
+        final isForeground = foregroundUiController.isForegroundUiActive;
+        return TickerMode(
+          enabled: isForeground,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            navigatorKey: globalState.navigatorKey,
+            localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
-          ],
-          builder: (_, child) {
+            ],
+            builder: (_, child) {
             return AppEnvManager(
               child: _buildApp(
                 child: _buildPlatformState(
@@ -224,13 +227,13 @@ class ApplicationState extends ConsumerState<Application> {
                 ),
               ),
             );
-          },
-          scrollBehavior: BaseScrollBehavior(),
-          title: appName,
-          locale: utils.getLocaleForString(locale),
-          supportedLocales: AppLocalizations.delegate.supportedLocales,
-          themeMode: themeProps.themeMode,
-          theme: ThemeData(
+            },
+            scrollBehavior: BaseScrollBehavior(),
+            title: appName,
+            locale: utils.getLocaleForString(locale),
+            supportedLocales: AppLocalizations.delegate.supportedLocales,
+            themeMode: themeProps.themeMode,
+            theme: ThemeData(
             useMaterial3: true,
             pageTransitionsTheme: _pageTransitionsTheme,
             colorScheme: _getAppColorScheme(
@@ -238,15 +241,16 @@ class ApplicationState extends ConsumerState<Application> {
               primaryColor: themeProps.primaryColor,
             ),
           ),
-          darkTheme: ThemeData(
+            darkTheme: ThemeData(
             useMaterial3: true,
             pageTransitionsTheme: _pageTransitionsTheme,
             colorScheme: _getAppColorScheme(
               brightness: Brightness.dark,
               primaryColor: themeProps.primaryColor,
             ).toPureBlack(themeProps.pureBlack),
+            ),
+            home: child!,
           ),
-          home: child!,
         );
       },
       child: const HomePage(),
@@ -263,3 +267,4 @@ class ApplicationState extends ConsumerState<Application> {
     super.dispose();
   }
 }
+

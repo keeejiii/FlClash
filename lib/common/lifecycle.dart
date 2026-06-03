@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:fl_clash/common/system.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
 class ForegroundUiController extends ValueNotifier<bool>
@@ -68,7 +70,14 @@ class ForegroundUiController extends ValueNotifier<bool>
   void _setForegroundUiActive(bool nextValue) {
     if (value != nextValue) {
       value = nextValue;
+      if (!nextValue) {
+        _cleanupBackgroundResources();
+      }
     }
+  }
+
+  void _cleanupBackgroundResources() {
+    imageCache.clearLiveImages();
   }
 
   @override
@@ -98,3 +107,4 @@ class ForegroundUiController extends ValueNotifier<bool>
 
 ForegroundUiController get foregroundUiController =>
     ForegroundUiController.instance;
+
