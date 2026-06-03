@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -429,7 +427,7 @@ class ProfileItem extends StatelessWidget {
   }
 }
 
-class LastUpdateTimeText extends ConsumerStatefulWidget {
+class LastUpdateTimeText extends StatelessWidget {
   final DateTime? lastUpdateDate;
   final TextStyle? style;
 
@@ -440,70 +438,18 @@ class LastUpdateTimeText extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<LastUpdateTimeText> createState() => _LastUpdateTimeTextState();
-}
-
-class _LastUpdateTimeTextState extends ConsumerState<LastUpdateTimeText> {
-  Timer? _timer;
-
-  bool get _isViewActive => ref.read(
-    isForegroundPageActiveProvider(PageLabel.profiles),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    ref.listenManual(
-      isForegroundPageActiveProvider(PageLabel.profiles),
-      (prev, next) {
-        if (next) {
-          if (mounted) {
-            setState(() {});
-          }
-          _startTicking();
-        } else {
-          _cancelTimer();
-        }
-      },
-    );
-    if (_isViewActive) {
-      _startTicking();
-    }
-  }
-
-  @override
-  void dispose() {
-    _cancelTimer();
-    super.dispose();
-  }
-
-  void _cancelTimer() {
-    _timer?.cancel();
-    _timer = null;
-  }
-
-  void _startTicking() {
-    _cancelTimer();
-    if (!_isViewActive) {
-      return;
-    }
-    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (!mounted || !_isViewActive) {
-        _cancelTimer();
-        return;
-      }
-      setState(() {});
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (widget.lastUpdateDate == null) {
-      return Text('', style: widget.style);
+    if (lastUpdateDate == null) {
+      return Text('', style: style);
     }
-    return Text(
-      widget.lastUpdateDate!.getLastUpdateTimeDesc(context),
-      style: widget.style,
+    return TickBuilder(
+      duration: const Duration(minutes: 1),
+      builder: (context, _) {
+        return Text(
+          lastUpdateDate!.getLastUpdateTimeDesc(context),
+          style: style,
+        );
+      },
     );
   }
 }

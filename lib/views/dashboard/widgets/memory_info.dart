@@ -3,70 +3,68 @@ import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/controller.dart';
-import 'package:fl_clash/enum/enum.dart';
-import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final _memoryStateNotifier = ValueNotifier<num>(0);
 
-class MemoryInfo extends ConsumerStatefulWidget {
+class MemoryInfo extends StatefulWidget {
   const MemoryInfo({super.key});
 
   @override
-  ConsumerState<MemoryInfo> createState() => _MemoryInfoState();
+  State<MemoryInfo> createState() => _MemoryInfoState();
 }
 
-class _MemoryInfoState extends ConsumerState<MemoryInfo> {
-  Timer? _timer;
+class _MemoryInfoState extends State<MemoryInfo> with WidgetsBindingObserver {
+  Timer? timer;
 
-  bool get _isViewActive => ref.read(
-    isForegroundPageActiveProvider(PageLabel.dashboard),
-  );
+  bool get _isUiActive {
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    return lifecycleState == null ||
+        lifecycleState == AppLifecycleState.resumed;
+  }
 
   @override
   void initState() {
     super.initState();
-    ref.listenManual(
-      isForegroundPageActiveProvider(PageLabel.dashboard),
-      (prev, next) {
-        if (next) {
-          _updateMemory();
-        } else {
-          _cancelUpdateTimer();
-        }
-      },
-    );
-    if (_isViewActive) {
-      _updateMemory();
-    }
+    WidgetsBinding.instance.addObserver(this);
+    _updateMemory();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cancelUpdateTimer();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _updateMemory();
+      return;
+    }
+    _cancelUpdateTimer();
+  }
+
   void _cancelUpdateTimer() {
-    _timer?.cancel();
-    _timer = null;
+    timer?.cancel();
+    timer = null;
   }
 
   Future<void> _updateMemory() async {
     _cancelUpdateTimer();
-    if (!_isViewActive) return;
+    if (!_isUiActive) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || !_isViewActive) return;
+      if (!mounted || !_isUiActive) return;
       final rss = ProcessInfo.currentRss;
       final memory = coreController.isCompleted
           ? await coreController.getMemory() + rss
           : rss;
-      if (!mounted || !_isViewActive) return;
+      if (!mounted || !_isUiActive) return;
       _memoryStateNotifier.value = memory;
-      _timer = Timer(const Duration(seconds: 2), () async {
+      timer = Timer(const Duration(seconds: 2), () async {
         _updateMemory();
       });
     });

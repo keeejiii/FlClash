@@ -335,9 +335,6 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - `RequestsView` 的显示刷新层，不在当前页或后台时不再继续推动 `_requestsStateNotifier`
 - `LogsView` 的显示刷新层，不在当前页或后台时不再继续推动 `_logsStateNotifier`，但日志采集与保留本身不受影响，回到当前页后再同步显示
 - `networkDetection` 的触发条件收紧为“仪表盘当前可见”，离开仪表盘就清空 UI 状态，回到仪表盘再重新检测
-- `MemoryInfo` 的 2 秒轮询，只在仪表盘当前可见且前台时继续运行；离页或转后台立即停表
-- `AccessView` 只有当前页可见且 `packagesProvider` 为空时才补拉包列表；不再在任意恢复前台时顺手补拉
-- Profiles 页里的 `LastUpdateTimeText` 只在 Profiles 当前可见且前台时按分钟刷新
 
 这里的设计原则不是“把前台体验砍残”，而是：
 
@@ -350,7 +347,7 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - crash 事件保留，不影响后台异常感知
 - log 保留，不影响后台调试和错误暴露
 - `loaded` 在后台直接跳过，避免为不可见页面维持 provider / group 同步抖动
-- 连接页轮询、请求页和日志页显示层、network detection、memory info、Access 页包列表补拉、Profiles 最后更新时间都进一步纳入“不可见即静默”
+- 连接页轮询、请求页和日志页显示层、network detection 都进一步纳入“不可见即静默”
 - 规则更统一：当前页完整、不可见页静默、后台静默
 
 ### 4.6 风险与取舍
@@ -371,9 +368,6 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - `RequestsView`：只有当前页可见时才同步 `_requestsStateNotifier`
 - `ConnectionsView`：只有当前页可见时才维持 1 秒轮询
 - `AppStateManager`：`networkDetection` 只有仪表盘当前可见时才触发；离开仪表盘即清空 UI 状态
-- `MemoryInfo`：只有仪表盘当前可见且前台时才维持 2 秒轮询
-- `AccessView`：只有 Access 页当前可见且 `packagesProvider` 为空时才补拉包列表
-- Profiles 页 `LastUpdateTimeText`：只有 Profiles 当前可见且前台时才按分钟刷新
 
 ---
 
@@ -385,12 +379,11 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 2. **后台真正停 foreground timer**
 3. **切网后主动清理旧连接**
 4. **后台不再消费高频 UI 事件**
-5. **连接页 / 请求页 / 日志页 / Profiles 最后更新时间只在当前页可见时更新显示层**
-6. **network detection / memory info 只在仪表盘当前可见时触发或轮询**
-7. **Access 页只在当前可见且 `packagesProvider` 为空时补拉包列表**
-8. **通知栏回退静态前台 service 形态**
-9. **日志在前后台都完整保留**
-10. **Doze 监听补齐**
+5. **连接页 / 请求页 / 日志页只在当前页可见时更新显示层**
+6. **network detection 只在仪表盘当前可见时触发**
+7. **通知栏回退静态前台 service 形态**
+8. **日志在前后台都完整保留**
+9. **Doze 监听补齐**
 
 这套方案的特点不是“激进智能保活”或“智能暂停代理”，而是：
 
