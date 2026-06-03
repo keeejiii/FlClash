@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -18,22 +16,58 @@ class AccessView extends ConsumerStatefulWidget {
   ConsumerState<AccessView> createState() => _AccessViewState();
 }
 
-class _AccessViewState extends ConsumerState<AccessView>
-    with WidgetsBindingObserver {
+class _AccessViewState extends ConsumerState<AccessView> {
   final GlobalKey<CommonScaffoldState> _scaffoldKey = GlobalKey();
   late ScrollController _controller;
   List<String>? _pinedList;
   bool _isInit = false;
+  bool _isLoadingPackages = false;
   AccessControlMode? _lastMode;
 
-  final _completer = Completer();
+  Future<List<Package>>? _packagesFuture;
+
+  bool get _isViewActive => ref.read(
+    isForegroundPageActiveProvider(PageLabel.access),
+  );
+
+  void _ensurePackagesLoaded() {
+    if (!_isViewActive ||
+        _isLoadingPackages ||
+        ref.read(packagesProvider).isNotEmpty) {
+      return;
+    }
+    _isLoadingPackages = true;
+    final future = ref.read(systemActionProvider.notifier).getPackages();
+    if (mounted) {
+      setState(() {
+        _packagesFuture = future;
+      });
+    } else {
+      _packagesFuture = future;
+    }
+    future.whenComplete(() {
+      if (!mounted) {
+        _isLoadingPackages = false;
+        return;
+      }
+      setState(() {
+        _isLoadingPackages = false;
+      });
+    });
+  }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _controller = ScrollController();
-    _completer.complete(ref.read(systemActionProvider.notifier).getPackages());
+    ref.listenManual(isForegroundPageActiveProvider(PageLabel.access), (
+      prev,
+      next,
+    ) {
+      if (next) {
+        _ensurePackagesLoaded();
+      }
+    });
     final accessControl = ref
         .read(vpnSettingProvider.select((state) => state.accessControlProps))
         .copyWith();
@@ -41,22 +75,15 @@ class _AccessViewState extends ConsumerState<AccessView>
       ref.read(accessControlStateProvider.notifier).value = accessControl;
       _isInit = true;
     });
+    if (_isViewActive) {
+      _ensurePackagesLoaded();
+    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed ||
-        ref.read(packagesProvider).isNotEmpty) {
-      return;
-    }
-    ref.read(systemActionProvider.notifier).getPackages();
   }
 
   Widget _buildSelectedAllButton({
@@ -321,33 +348,36 @@ class _AccessViewState extends ConsumerState<AccessView>
     required List<String> valueList,
   }) {
     return FutureBuilder(
-      future: _completer.future,
+      future: _packagesFuture,
       builder: (context, snapshot) {
         final appLocalizations = context.appLocalizations;
+        if (packages.isNotEmpty) {
+          return CommonScrollBar(
+            controller: _controller,
+            child: ListView.builder(
+              controller: _controller,
+              itemCount: packages.length,
+              itemExtent: 72,
+              itemBuilder: (_, index) {
+                final package = packages[index];
+                return PackageListItem(
+                  key: Key(package.packageName),
+                  package: package,
+                  value: valueList.contains(package.packageName),
+                  onChanged: (value) {
+                    _handleSelected(package.packageName);
+                  },
+                );
+              },
+            ),
+          );
+        }
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
         return packages.isEmpty
             ? NullStatus(label: appLocalizations.noData)
-            : CommonScrollBar(
-                controller: _controller,
-                child: ListView.builder(
-                  controller: _controller,
-                  itemCount: packages.length,
-                  itemExtent: 72,
-                  itemBuilder: (_, index) {
-                    final package = packages[index];
-                    return PackageListItem(
-                      key: Key(package.packageName),
-                      package: package,
-                      value: valueList.contains(package.packageName),
-                      onChanged: (value) {
-                        _handleSelected(package.packageName);
-                      },
-                    );
-                  },
-                ),
-              );
+            : const SizedBox.shrink();
       },
     );
   }

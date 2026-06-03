@@ -402,6 +402,28 @@ bool isCurrentPage(
   return false;
 }
 
+final foregroundUiActiveProvider = Provider<bool>((ref) {
+  void listener() {
+    ref.invalidateSelf();
+  }
+
+  foregroundUiController.addListener(listener);
+  ref.onDispose(() {
+    foregroundUiController.removeListener(listener);
+  });
+
+  return foregroundUiController.isForegroundUiActive;
+});
+
+final isForegroundPageActiveProvider = Provider.family<bool, PageLabel>((
+  ref,
+  pageLabel,
+) {
+  final isForegroundUiActive = ref.watch(foregroundUiActiveProvider);
+  final isCurrentPage = ref.watch(isCurrentPageProvider(pageLabel));
+  return isForegroundUiActive && isCurrentPage;
+});
+
 @riverpod
 String realTestUrl(Ref ref, [String? testUrl]) {
   final currentTestUrl = ref.watch(appSettingProvider).testUrl;
