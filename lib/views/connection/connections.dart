@@ -20,11 +20,14 @@ class ConnectionsView extends ConsumerStatefulWidget {
 }
 
 class _ConnectionsViewState extends ConsumerState<ConnectionsView>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   final _connectionsStateNotifier = ValueNotifier<TrackerInfosState>(
     const TrackerInfosState(),
   );
   final ScrollController _scrollController = ScrollController();
+  ModalRoute<dynamic>? _route;
+  bool _isRouteCurrent = false;
+  bool _updateQueued = false;
 
   Timer? timer;
 
@@ -32,15 +35,54 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
     isCurrentPageProvider(PageLabel.connections),
   );
 
+  bool get _usesRouteVisibility => SheetProvider.of(context) != null;
+
+  bool get _isVisiblePage =>
+      _isCurrentPage || (_usesRouteVisibility && _isRouteCurrent);
+
   bool get _isUiActive =>
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
-  bool get _isViewActive => _isUiActive && _isCurrentPage;
+  bool get _isViewActive => _isUiActive && _isVisiblePage;
 
   void _clearRenderedConnections() {
     _connectionsStateNotifier.value = _connectionsStateNotifier.value.copyWith(
       trackerInfos: [],
     );
+  }
+
+  void _handleVisibilityChanged() {
+    if (_isViewActive) {
+      _updateConnectionsTask();
+      return;
+    }
+    _cancelUpdateTimer();
+    _clearRenderedConnections();
+  }
+
+  void _setRouteCurrent(bool value) {
+    if (_isRouteCurrent == value) {
+      return;
+    }
+    _isRouteCurrent = value;
+    _handleVisibilityChanged();
+  }
+
+  void _subscribeRouteObserver() {
+    final route = ModalRoute.of(context);
+    if (_route == route) {
+      return;
+    }
+    if (_route != null) {
+      commonRouteObserver.unsubscribe(this);
+    }
+    _route = route;
+    if (route != null) {
+      commonRouteObserver.subscribe(this, route);
+      _isRouteCurrent = route.isCurrent;
+    } else {
+      _isRouteCurrent = false;
+    }
   }
 
   List<Widget> _buildActions() {
@@ -70,6 +112,7 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
   void _cancelUpdateTimer() {
     timer?.cancel();
     timer = null;
+    _updateQueued = false;
   }
 
   Future<void> _updateConnectionsTask() async {
@@ -77,14 +120,24 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
       _cancelUpdateTimer();
       return;
     }
+    if (_updateQueued) {
+      return;
+    }
+    _updateQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || !_isViewActive) {
         _cancelUpdateTimer();
         return;
       }
       await _updateConnections();
-      _cancelUpdateTimer();
-      timer = Timer(const Duration(seconds: 1), () async {
+      if (!mounted || !_isViewActive) {
+        _cancelUpdateTimer();
+        return;
+      }
+      _updateQueued = false;
+      timer?.cancel();
+      timer = Timer(const Duration(seconds: 1), () {
+        _updateQueued = false;
         _updateConnectionsTask();
       });
     });
@@ -94,34 +147,52 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (_isViewActive) {
-      _updateConnectionsTask();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _handleVisibilityChanged();
+      }
+    });
     ref.listenManual(currentPageLabelProvider, (prev, next) {
-      final wasCurrent = prev == PageLabel.connections;
-      final isCurrent = next == PageLabel.connections;
-      if (wasCurrent == isCurrent) {
-        return;
-      }
-      if (isCurrent && _isUiActive) {
-        _updateConnectionsTask();
-      } else {
-        _cancelUpdateTimer();
-        _clearRenderedConnections();
-      }
+      _handleVisibilityChanged();
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isCurrentPage) {
-      _updateConnectionsTask();
+    if (state == AppLifecycleState.resumed && _isVisiblePage) {
+      _handleVisibilityChanged();
       return;
     }
     _cancelUpdateTimer();
     if (state != AppLifecycleState.inactive) {
       _clearRenderedConnections();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _subscribeRouteObserver();
+  }
+
+  @override
+  void didPush() {
+    _setRouteCurrent(true);
+  }
+
+  @override
+  void didPopNext() {
+    _setRouteCurrent(true);
+  }
+
+  @override
+  void didPushNext() {
+    _setRouteCurrent(false);
+  }
+
+  @override
+  void didPop() {
+    _setRouteCurrent(false);
   }
 
   Future<void> _updateConnections() async {
@@ -138,6 +209,9 @@ class _ConnectionsViewState extends ConsumerState<ConnectionsView>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (_route != null) {
+      commonRouteObserver.unsubscribe(this);
+    }
     _cancelUpdateTimer();
     _connectionsStateNotifier.dispose();
     _scrollController.dispose();

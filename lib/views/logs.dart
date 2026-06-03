@@ -16,18 +16,24 @@ class LogsView extends ConsumerStatefulWidget {
 }
 
 class _LogsViewState extends ConsumerState<LogsView>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   final _logsStateNotifier = ValueNotifier<LogsState>(const LogsState());
   late ScrollController _scrollController;
+  ModalRoute<dynamic>? _route;
+  bool _isRouteCurrent = false;
 
   List<Log> _logs = [];
 
   bool get _isCurrentPage => ref.read(isCurrentPageProvider(PageLabel.logs));
 
+  bool get _usesRouteVisibility => SheetProvider.of(context) != null;
+
+  bool get _isVisiblePage => _isCurrentPage || (_usesRouteVisibility && _isRouteCurrent);
+
   bool get _isUiActive =>
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
-  bool get _isViewActive => _isUiActive && _isCurrentPage;
+  bool get _isViewActive => _isUiActive && _isVisiblePage;
 
   void _syncLogsFromStore() {
     _logs = ref.read(logsProvider).list;
@@ -39,14 +45,49 @@ class _LogsViewState extends ConsumerState<LogsView>
     _logsStateNotifier.value = _logsStateNotifier.value.copyWith(logs: []);
   }
 
+  void _handleVisibilityChanged() {
+    if (_isViewActive) {
+      _syncLogsFromStore();
+      return;
+    }
+    _clearRenderedLogs();
+  }
+
+  void _setRouteCurrent(bool value) {
+    if (_isRouteCurrent == value) {
+      return;
+    }
+    _isRouteCurrent = value;
+    _handleVisibilityChanged();
+  }
+
+  void _subscribeRouteObserver() {
+    final route = ModalRoute.of(context);
+    if (_route == route) {
+      return;
+    }
+    if (_route != null) {
+      commonRouteObserver.unsubscribe(this);
+    }
+    _route = route;
+    if (route != null) {
+      commonRouteObserver.subscribe(this, route);
+      _isRouteCurrent = route.isCurrent;
+    } else {
+      _isRouteCurrent = false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scrollController = ScrollController(initialScrollOffset: double.maxFinite);
-    if (_isViewActive) {
-      _syncLogsFromStore();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _handleVisibilityChanged();
+      }
+    });
     ref.listenManual(logsProvider.select((state) => VM(state.list)), (
       prev,
       next,
@@ -63,28 +104,45 @@ class _LogsViewState extends ConsumerState<LogsView>
       }
     });
     ref.listenManual(currentPageLabelProvider, (prev, next) {
-      final wasCurrent = prev == PageLabel.logs;
-      final isCurrent = next == PageLabel.logs;
-      if (wasCurrent == isCurrent) {
-        return;
-      }
-      if (isCurrent && _isUiActive) {
-        _syncLogsFromStore();
-      } else {
-        _clearRenderedLogs();
-      }
+      _handleVisibilityChanged();
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isCurrentPage) {
-      _syncLogsFromStore();
+    if (state == AppLifecycleState.resumed && _isVisiblePage) {
+      _handleVisibilityChanged();
       return;
     }
     if (state != AppLifecycleState.inactive) {
       _clearRenderedLogs();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _subscribeRouteObserver();
+  }
+
+  @override
+  void didPush() {
+    _setRouteCurrent(true);
+  }
+
+  @override
+  void didPopNext() {
+    _setRouteCurrent(true);
+  }
+
+  @override
+  void didPushNext() {
+    _setRouteCurrent(false);
+  }
+
+  @override
+  void didPop() {
+    _setRouteCurrent(false);
   }
 
   List<Widget> _buildActions() {
@@ -111,6 +169,9 @@ class _LogsViewState extends ConsumerState<LogsView>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (_route != null) {
+      commonRouteObserver.unsubscribe(this);
+    }
     _logsStateNotifier.dispose();
     _scrollController.dispose();
     super.dispose();

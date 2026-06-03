@@ -17,21 +17,28 @@ class RequestsView extends ConsumerStatefulWidget {
 }
 
 class _RequestsViewState extends ConsumerState<RequestsView>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   final _requestsStateNotifier = ValueNotifier<TrackerInfosState>(
     const TrackerInfosState(),
   );
   List<TrackerInfo> _requests = [];
   late final ScrollController _scrollController;
+  ModalRoute<dynamic>? _route;
+  bool _isRouteCurrent = false;
 
   bool get _isCurrentPage => ref.read(
     isCurrentPageProvider(PageLabel.requests),
   );
 
+  bool get _usesRouteVisibility => SheetProvider.of(context) != null;
+
+  bool get _isVisiblePage =>
+      _isCurrentPage || (_usesRouteVisibility && _isRouteCurrent);
+
   bool get _isUiActive =>
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
-  bool get _isViewActive => _isUiActive && _isCurrentPage;
+  bool get _isViewActive => _isUiActive && _isVisiblePage;
 
   void _syncRequestsFromStore() {
     _requests = ref.read(requestsProvider).list;
@@ -45,6 +52,39 @@ class _RequestsViewState extends ConsumerState<RequestsView>
     _requestsStateNotifier.value = _requestsStateNotifier.value.copyWith(
       trackerInfos: [],
     );
+  }
+
+  void _handleVisibilityChanged() {
+    if (_isViewActive) {
+      _syncRequestsFromStore();
+      return;
+    }
+    _clearRenderedRequests();
+  }
+
+  void _setRouteCurrent(bool value) {
+    if (_isRouteCurrent == value) {
+      return;
+    }
+    _isRouteCurrent = value;
+    _handleVisibilityChanged();
+  }
+
+  void _subscribeRouteObserver() {
+    final route = ModalRoute.of(context);
+    if (_route == route) {
+      return;
+    }
+    if (_route != null) {
+      commonRouteObserver.unsubscribe(this);
+    }
+    _route = route;
+    if (route != null) {
+      commonRouteObserver.subscribe(this, route);
+      _isRouteCurrent = route.isCurrent;
+    } else {
+      _isRouteCurrent = false;
+    }
   }
 
   void _onSearch(String value) {
@@ -64,9 +104,11 @@ class _RequestsViewState extends ConsumerState<RequestsView>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scrollController = ScrollController(initialScrollOffset: double.maxFinite);
-    if (_isViewActive) {
-      _syncRequestsFromStore();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _handleVisibilityChanged();
+      }
+    });
     ref.listenManual(requestsProvider.select((state) => VM(state.list)), (
       prev,
       next,
@@ -78,23 +120,14 @@ class _RequestsViewState extends ConsumerState<RequestsView>
       updateRequestsThrottler();
     });
     ref.listenManual(currentPageLabelProvider, (prev, next) {
-      final wasCurrent = prev == PageLabel.requests;
-      final isCurrent = next == PageLabel.requests;
-      if (wasCurrent == isCurrent) {
-        return;
-      }
-      if (isCurrent && _isUiActive) {
-        _syncRequestsFromStore();
-      } else {
-        _clearRenderedRequests();
-      }
+      _handleVisibilityChanged();
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isCurrentPage) {
-      _syncRequestsFromStore();
+    if (state == AppLifecycleState.resumed && _isVisiblePage) {
+      _handleVisibilityChanged();
       return;
     }
     if (state != AppLifecycleState.inactive) {
@@ -103,8 +136,37 @@ class _RequestsViewState extends ConsumerState<RequestsView>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _subscribeRouteObserver();
+  }
+
+  @override
+  void didPush() {
+    _setRouteCurrent(true);
+  }
+
+  @override
+  void didPopNext() {
+    _setRouteCurrent(true);
+  }
+
+  @override
+  void didPushNext() {
+    _setRouteCurrent(false);
+  }
+
+  @override
+  void didPop() {
+    _setRouteCurrent(false);
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (_route != null) {
+      commonRouteObserver.unsubscribe(this);
+    }
     _requestsStateNotifier.dispose();
     _scrollController.dispose();
     super.dispose();

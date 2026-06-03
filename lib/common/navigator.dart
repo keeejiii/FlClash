@@ -4,6 +4,8 @@ import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/state.dart';
 import 'package:flutter/material.dart';
 
+final commonRouteObserver = RouteObserver<ModalRoute<dynamic>>();
+
 class BaseNavigator {
   static Future<T?> push<T>(BuildContext context, Widget child) async {
     if (!globalState.container.read(isMobileViewProvider)) {
