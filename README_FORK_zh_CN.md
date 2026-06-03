@@ -1,4 +1,4 @@
-# FlClash Fork README（中文）
+﻿# FlClash Fork README（中文）
 
 > 适用于：`keeejiii/FlClash`
 >
@@ -194,6 +194,12 @@
 - 后台调试
 - 问题复现与排障
 
+#### 11. 扩展页面可见性控制
+适用场景：
+- 代理页面 (ProxiesView) 和配置文件页面 (ProfilesView) 纳入"当前页可见才工作"规则
+- 后台/切页时自动暂停 loading 监听和定时器
+- 进一步减少非当前页的无意义 provider 监听和 UI 刷新
+
 ---
 
 ## 四、这个 fork 的取舍是什么
@@ -265,3 +271,4 @@
 - [`UPDATELOG_zh_CN.md`](./UPDATELOG_zh_CN.md)
 
 这个文件记录了本轮 Android 省电与后台行为收紧的完整过程。
+

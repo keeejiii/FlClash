@@ -1,4 +1,4 @@
-import 'package:fl_clash/common/common.dart';
+﻿import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/common.dart';
 import 'package:fl_clash/models/state.dart';
@@ -19,7 +19,8 @@ class ProxiesView extends ConsumerStatefulWidget {
   ConsumerState<ProxiesView> createState() => _ProxiesViewState();
 }
 
-class _ProxiesViewState extends ConsumerState<ProxiesView> {
+class _ProxiesViewState extends ConsumerState<ProxiesView>
+    with WidgetsBindingObserver {
   final GlobalKey<CommonScaffoldState> _scaffoldKey = GlobalKey();
   final GlobalKey<ProxiesTabViewState> _proxiesTabKey = GlobalKey();
   bool _hasProviders = false;
@@ -96,9 +97,22 @@ class _ProxiesViewState extends ConsumerState<ProxiesView> {
     ref.read(queryProvider(QueryTag.proxies).notifier).value = value;
   }
 
+  bool get _isViewActive {
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (lifecycleState != AppLifecycleState.resumed) return false;
+    return ref.read(currentPageLabelProvider) == PageLabel.proxies;
+  }
+
+  void _handleVisibilityChanged() {
+    if (!_isViewActive) {
+      _scaffoldKey.currentState?.handleExitSearching();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     ref.listenManual(providersProvider.select((state) => state.isNotEmpty), (
       prev,
       next,
@@ -122,14 +136,25 @@ class _ProxiesViewState extends ConsumerState<ProxiesView> {
       },
       fireImmediately: true,
     );
-    ref.listenManual(
-      currentPageLabelProvider.select((state) => state == PageLabel.proxies),
-      (prev, next) {
-        if (prev != next && next == false) {
-          _scaffoldKey.currentState?.handleExitSearching();
-        }
-      },
-    );
+    ref.listenManual(currentPageLabelProvider, (prev, next) {
+      if (prev == next) return;
+      _handleVisibilityChanged();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _handleVisibilityChanged();
+    } else if (state != AppLifecycleState.inactive) {
+      _handleVisibilityChanged();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -137,7 +162,9 @@ class _ProxiesViewState extends ConsumerState<ProxiesView> {
     final proxiesType = ref.watch(
       proxiesStyleSettingProvider.select((state) => state.type),
     );
-    final isLoading = ref.watch(loadingProvider(LoadingTag.proxies));
+    final isLoading = _isViewActive
+        ? ref.watch(loadingProvider(LoadingTag.proxies))
+        : false;
     return CommonScaffold(
       key: _scaffoldKey,
       isLoading: isLoading,

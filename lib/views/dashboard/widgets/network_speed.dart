@@ -1,4 +1,4 @@
-import 'package:fl_clash/common/common.dart';
+﻿import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/widgets/widgets.dart';
@@ -12,8 +12,27 @@ class NetworkSpeed extends StatefulWidget {
   State<NetworkSpeed> createState() => _NetworkSpeedState();
 }
 
-class _NetworkSpeedState extends State<NetworkSpeed> {
+class _NetworkSpeedState extends State<NetworkSpeed>
+    with WidgetsBindingObserver {
   List<Point> initPoints = const [Point(0, 0), Point(1, 0)];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // NetworkSpeed relies on trafficsProvider which is controlled by
+    // SetupAction timer lifecycle; minimal handling needed here.
+  }
 
   List<Point> _getPoints(List<Traffic> traffics) {
     final List<Point> trafficPoints = traffics

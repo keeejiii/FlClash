@@ -1,4 +1,4 @@
-# FlClash Fork Update Log（中文）
+﻿# FlClash Fork Update Log（中文）
 
 > 仓库：`keeejiii/FlClash`
 >
@@ -18,13 +18,13 @@
 2. **优先削减后台无意义刷新、轮询、事件消费**
 3. **优先在 Dart 层和轻量 Android 模块层改动**
 4. **避免直接引入 BettBox 的 smartStop / smartResume / native 状态机**
-5. **尽量把改动收束在少量文件，方便后续同步 upstream**
+5. **尽量把改动收拢在少量文件，方便后续同步 upstream**
 
 ---
 
 ## 二、阶段总览
 
-本轮改动分成四个阶段：
+本轮改动分成五个阶段：
 
 ### 阶段 1：后台统计与通知收紧
 - 后台不再每秒刷新 traffic / totalTraffic，改为低频补采样
@@ -44,6 +44,12 @@
 - 后台不再分发 `delay` / `request` 这类高频 UI 事件
 - 保留 `log` / `crash`，后台跳过 `loaded`
 - 日志 / 请求 / 连接 / network detection 这类重 UI 页面，只在当前页实际可见时继续刷新显示层
+
+### 阶段 5（4）：扩展页面可见性控制
+- 代理页面 (ProxiesView) 纳入"当前页可见才工作"规则
+- 配置文件页面 (ProfilesView) 优化加载状态控制
+- LastUpdateTimeText 组件独立管理生命周期
+- NetworkSpeed/TrafficUsage 组件绑定生命周期观察
 
 ---
 
@@ -77,12 +83,6 @@
 #### Android / Kotlin
 - `android/service/src/main/java/com/follow/clash/service/modules/NotificationModule.kt`
 - `android/service/src/main/java/com/follow/clash/service/modules/SuspendModule.kt`
-- 以及后续清理：
-  - `android/app/src/main/kotlin/com/follow/clash/Service.kt`
-  - `android/app/src/main/kotlin/com/follow/clash/plugins/ServicePlugin.kt`
-  - `android/service/src/main/java/com/follow/clash/service/models/NotificationParams.kt`
-  - `android/service/src/main/java/com/follow/clash/service/models/Traffic.kt`
-  - `lib/plugins/service.dart`
 
 ### 1.3 实际做法
 
@@ -99,44 +99,12 @@
 - 但不影响代理本身运行
 
 #### B. 去掉 speed 通知栏
-这部分没有做“隐藏一个显示项”那么简单，而是**把整条 speed 通知链路完整回收**：
-
 - 删除 Flutter -> MethodChannel -> Kotlin 的 speed 通知推送接口
 - `NotificationParams` 去掉 `contentText`
-- `NotificationModule` 回退成静态前台通知，只保留：
-  - 标题
-  - 停止按钮
-
-效果：
-- 通知栏不再显示 `↑ xx/s ↓ xx/s`
-- 不再有专门为 speed 刷新的链路
+- `NotificationModule` 回退成静态前台通知
 
 #### C. 补 Doze 监听
-在 `SuspendModule.kt` 中增加：
-
-- `PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED`
-
-效果：
-- 进入 / 退出 Doze 时，挂起状态判断更完整
-- 不只依赖亮灭屏广播
-
-### 1.4 收益
-
-- 后台 traffic 统计活跃度下降
-- 通知栏从“动态 speed 面板”退回静态前台 service 通知
-- 减少因通知 speed 刷新导致的额外 wakeup / UI 更新
-- Doze 下的挂起逻辑更完整
-
-### 1.5 风险与取舍
-
-- 放弃了通知栏实时速度可视化
-- 但这是主动取舍，换取更干净的后台行为
-- 没有停前台 service，没有伤害代理保活主链路
-
-### 1.6 对应提交
-
-- `e5a04b8` `perf(android): reduce background traffic polling and notification churn`
-- `6b8acd2` `perf(android): remove speed notification update path`
+在 `SuspendModule.kt` 中增加 `PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED`
 
 ---
 
@@ -144,15 +112,9 @@
 
 ### 2.1 目标
 
-阶段 1 完成后，后台虽然已经不再每秒更新 traffic，但 periodic timer 仍然存在：
-
-- 每秒触发一次 Dart 层 timer
-- 只是进入后很快 return
-
-这仍然不是最省。
+阶段 1 完成后，后台虽然已经不再每秒更新 traffic，但 periodic timer 仍然存在。
 
 目标：
-
 - 后台时真正取消 foreground timer
 - 回前台时再恢复 timer
 
@@ -165,41 +127,14 @@
 
 #### A. 在 `SetupAction` 增加 timer 生命周期管理
 新增：
-
 - `_startUpdateTimer()`
 - `pauseForegroundUpdates()`
 - `resumeForegroundUpdates()`
 
-调整：
-
-- `_handleStart()` 不再直接裸建 timer，统一走 `_startUpdateTimer()`
-- `handleStop()` 统一走 `pauseForegroundUpdates()`
-
 #### B. 在 `AppStateManager` 里接 lifecycle
 在 `didChangeAppLifecycleState()` 中：
-
-- `resumed`：
-  - `resumeForegroundUpdates()`
-  - 然后继续原本的权限检查、恢复、checkIp、Android 下的 core 状态检查
-- `inactive / hidden / paused / detached`：
-  - `pauseForegroundUpdates()`
-
-### 2.4 收益
-
-- 后台不再保留每秒 periodic timer
-- 比“后台跑 timer 再 return”更干净
-- 前台恢复后可以立即补一次状态，避免 UI 卡住一拍
-
-### 2.5 风险与取舍
-
-- 后台时 `runTime` 数值不会每秒递增刷新，但 `runTimeProvider` 不会被置空
-- 也就是说：
-  - UI 上“正在运行”的状态仍然存在
-  - 只是后台不再做无意义数值更新
-
-### 2.6 对应提交
-
-- `94f7470` `perf(android): pause foreground timers while app is backgrounded`
+- `resumed`：`resumeForegroundUpdates()`
+- `inactive / hidden / paused / detached`：`pauseForegroundUpdates()`
 
 ---
 
@@ -207,16 +142,9 @@
 
 ### 3.1 目标
 
-FlClash 在网络切换时，可能出现：
-
-- 旧连接拖尾
-- Wi‑Fi / 流量切换后恢复慢
-- 后台切网后一段时间才恢复正常
-
-BettBox 在这类场景中更积极，但其实现已经扩展成一整套 native 状态机，直接搬会显著扩大 fork 分叉。
+FlClash 在网络切换时，可能出现旧连接拖尾、切网后恢复慢等问题。
 
 目标：
-
 - 不引入 smartStop / smartResume
 - 不引入 Android native 复杂状态机
 - 只在 Dart 层做一个轻量网络变化响应
@@ -227,35 +155,17 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 
 ### 3.3 实际做法
 
-直接复用现有 `ConnectivityManager(onConnectivityChanged: ...)`：
+复用现有 `ConnectivityManager(onConnectivityChanged: ...)`：
 
 #### A. 增加主网络类型判断
 新增：
-
 - `_lastPrimaryConnectivity`
 - `_getPrimaryConnectivity(List<ConnectivityResult>)`
 
-主网络类型优先级：
-- wifi
-- mobile
-- ethernet
-- bluetooth
-- other
-- vpn
-- none
-
-目的：
-- 避免 `vpn` 结果污染真实底层网络判断
+主网络类型优先级：wifi > mobile > ethernet > bluetooth > other > vpn > none
 
 #### B. 增加 debounce
-新增：
-
-- `_networkChangeDebounceTimer`
-
-逻辑：
-- 网络主类型发生变化后
-- debounce 800ms
-- 再执行动作
+新增 `_networkChangeDebounceTimer`，debounce 800ms 后执行动作
 
 #### C. 轻量动作：`closeConnections()`
 触发条件：
@@ -264,48 +174,19 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - 当前已启动
 - 当前不在 suspend 状态
 
-动作：
-- `await coreController.closeConnections()`
-
-### 3.4 收益
-
-- Wi‑Fi ↔ 流量切换时，旧连接更快清掉
-- 减少切网后的连接拖尾和恢复慢
-- 不改变 VPN / service 生命周期
-
-### 3.5 风险与取舍
-
-- 某些长连接场景下，切网时会更积极地清旧连接
-- 这是主动取舍，用更快恢复换更少拖尾
-- 没有动 core 主状态，也没有做 aggressive restart
-
-### 3.6 对应提交
-
-- `a860e91` `perf(android): close stale connections after network changes`
+动作：`await coreController.closeConnections()`
 
 ---
 
 ## 阶段 4（3C-lite）：后台丢弃高频 UI 事件
 
-### 4.1 为什么不是直接做“后台停 listener”
+### 4.1 为什么不是直接做"后台停 listener"
 
-在 FlClash 当前架构里：
-
-- `startListener()` / `stopListener()`
-- 最终和 Android service 生命周期绑定
-
-也就是说，如果直接把 listener 当作“后台 UI 消费开关”：
-
-- 后台 `stopListener()`
-- 很可能不是只停 UI 事件消费
-- 而是把 service / 代理运行链路一起动到
-
-这太危险，不适合作为省电优化直接落地。
+在 FlClash 当前架构里，`startListener()` / `stopListener()` 最终和 Android service 生命周期绑定。直接停 listener 很可能不只是停 UI 事件，而是把 service / 代理运行链路一起动到。
 
 ### 4.2 目标
 
 不动 listener/service 生命周期，只做：
-
 - 后台时跳过只服务 UI 的高频事件消费
 
 ### 4.3 涉及文件
@@ -329,45 +210,57 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - `CoreEventType.log`
 - `CoreEventType.crash`
 
-同时，页面级的明显 UI 刷新残口也进一步收紧为“当前页可见才运行”：
+页面级 UI 刷新：
+- `ConnectionsView` 的 1 秒轮询，不在当前页或后台时直接停止
+- `RequestsView` 的显示刷新层，不在当前页或后台时不再推动 `_requestsStateNotifier`
+- `LogsView` 的显示刷新层，不在当前页或后台时不再推动 `_logsStateNotifier`，但日志采集保留
+- `networkDetection` 的触发条件收紧为"仪表盘当前可见"
 
-- `ConnectionsView` 的 1 秒 `getConnections()` 轮询，不在当前页或后台时直接停止，回到当前页再恢复
-- `RequestsView` 的显示刷新层，不在当前页或后台时不再继续推动 `_requestsStateNotifier`
-- `LogsView` 的显示刷新层，不在当前页或后台时不再继续推动 `_logsStateNotifier`，但日志采集与保留本身不受影响，回到当前页后再同步显示
-- `networkDetection` 的触发条件收紧为“仪表盘当前可见”，离开仪表盘就清空 UI 状态，回到仪表盘再重新检测
+---
 
-这里的设计原则不是“把前台体验砍残”，而是：
+## 阶段 5（4）：扩展页面可见性控制
 
-> **当前页 UI 完整，不可见页静默；后台 UI 静默；运行层与日志保留。**
+### 5.1 目标
 
-### 4.5 收益
+将"当前页可见才工作"规则扩展到更多页面，进一步减少后台/非当前页的无意义工作。
 
-- 后台不再消费高频 UI 事件
-- 连对应的事件反序列化成本也能省一点
-- crash 事件保留，不影响后台异常感知
-- log 保留，不影响后台调试和错误暴露
-- `loaded` 在后台直接跳过，避免为不可见页面维持 provider / group 同步抖动
-- 连接页轮询、请求页和日志页显示层、network detection 都进一步纳入“不可见即静默”
-- 规则更统一：当前页完整、不可见页静默、后台静默
+### 5.2 涉及文件
 
-### 4.6 风险与取舍
+#### 代理页面
+- `lib/views/proxies/proxies.dart`
+  - 添加 `WidgetsBindingObserver`
+  - `_isViewActive` 判断当前是否在 proxies 页面且处于 resumed 状态
+  - `loadingProvider` 只在当前页可见时监听
+  - 后台/切页时自动关闭搜索状态
 
-- 后台时 request / delay 等前台专属 UI 数据不会继续增长
-- 不在当前页时，日志 / 请求 / 连接这些页面的显示层状态不会持续维护
-- 这是预期行为：后台不再为不可见 UI 持续加工高频数据
-- 日志保留全部等级（debug / info / warning / error），用于后台调试与排障
-- 当前页恢复时会重新从 provider / core 同步最新可见数据，以换取不可见期的更低 churn
+#### 配置文件页面
+- `lib/views/profiles/profiles.dart`
+  - 添加 `WidgetsBindingObserver`
+  - `_isViewActive` 判断
+  - `loadingProvider` 只在当前页可见时监听
+  - `LastUpdateTimeText` 改为 StatefulWidget，独立管理 timer 生命周期
+  - Timer 在后台时取消，前台时恢复
 
-### 4.7 对应提交
+#### 仪表盘组件
+- `lib/views/dashboard/widgets/network_speed.dart`
+  - 添加 `WidgetsBindingObserver`
+  - 生命周期变化时无需特殊处理（依赖 `trafficsProvider` 的 timer 控制）
 
-- `bcb1ff0` `perf(android): skip ui-heavy core events while app is backgrounded`
+- `lib/views/dashboard/widgets/traffic_usage.dart`
+  - 已经是 StatelessWidget，依赖 `totalTrafficProvider`
+  - 数据更新由 `SetupAction` 的 timer 生命周期管理
 
-### 4.8 当前工作树继续补充（未提交）
+### 5.3 收益
 
-- `LogsView`：只有当前页可见时才同步 `_logsStateNotifier`
-- `RequestsView`：只有当前页可见时才同步 `_requestsStateNotifier`
-- `ConnectionsView`：只有当前页可见时才维持 1 秒轮询
-- `AppStateManager`：`networkDetection` 只有仪表盘当前可见时才触发；离开仪表盘即清空 UI 状态
+- 代理页面、配置文件页面在后台或非当前页时减少 provider 监听开销
+- `LastUpdateTimeText` 的定时器在后台时不再运行，减少不必要的 UI 刷新
+- 页面行为更加一致：都遵循"当前页完整、不可见页静默、后台静默"原则
+
+### 5.4 风险与取舍
+
+- `LastUpdateTimeText` 的"X分钟前更新"显示在后台时不会自动刷新
+- 回前台时会立即刷新，显示正确时间
+- 这是主动取舍，换取更干净的后台行为
 
 ---
 
@@ -379,13 +272,14 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 2. **后台真正停 foreground timer**
 3. **切网后主动清理旧连接**
 4. **后台不再消费高频 UI 事件**
-5. **连接页 / 请求页 / 日志页只在当前页可见时更新显示层**
+5. **连接页 / 请求页 / 日志页只在当前页可见时刷新显示层**
 6. **network detection 只在仪表盘当前可见时触发**
-7. **通知栏回退静态前台 service 形态**
-8. **日志在前后台都完整保留**
-9. **Doze 监听补齐**
+7. **代理页面、配置文件页面纳入可见性控制**
+8. **通知栏回退静态前台 service 形态**
+9. **日志在前后台都完整保留**
+10. **Doze 监听补齐**
 
-这套方案的特点不是“激进智能保活”或“智能暂停代理”，而是：
+这套方案的特点不是"激进智能保活"或"智能暂停代理"，而是：
 
 > **当前页 UI 完整、不可见页静默、后台 UI 静默，同时尽量不伤害 VPN / service 主链路。**
 
@@ -393,7 +287,7 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 
 ## 五、对后台留存与前台行为的判断
 
-这轮修改的目标不是“用更复杂的保活手段提升留存”，而是“降低后台噪音，避免系统把它判成高活跃后台”，同时保持：
+这轮修改的目标不是"用更复杂的保活手段提升留存"，而是"降低后台噪音，避免系统把它判成高活跃后台"，同时保持：
 
 - **前台：UI 完整工作**
 - **后台：UI 静默**
@@ -426,6 +320,9 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - `lib/providers/action.dart`
 - `lib/manager/app_manager.dart`
 - `lib/core/event.dart`
+- `lib/views/proxies/proxies.dart`
+- `lib/views/profiles/profiles.dart`
+- `lib/views/dashboard/widgets/network_speed.dart`
 
 这些主要是 Dart 层行为收紧，和 upstream 的核心 Android 原生链路耦合较低。
 
@@ -451,7 +348,7 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 如果后续继续优化，建议顺序：
 
 1. **先观察实际体感与后台稳定性**
-2. **继续优先收紧“只服务 UI 的后台行为”**
+2. **继续优先收紧"只服务 UI 的后台行为"**
 3. **如果网络切换响应仍不够，再考虑 3B-2（轻量 native callback）**
 4. **如果要做可配置化，再把部分后台策略做成开关**
 5. **仍然不建议直接搬 BettBox 的 smart stop 完整架构**
@@ -468,12 +365,16 @@ BettBox 在这类场景中更积极，但其实现已经扩展成一整套 nativ
 - `a860e91` `perf(android): close stale connections after network changes`
 - `bcb1ff0` `perf(android): skip ui-heavy core events while app is backgrounded`
 - `c47c3d6` `perf(android): keep full UI updates in foreground only`
+- `1074c16` `perf(android): gate remaining visible-page UI churn`
+- `6ba8738` `fix(ci): use tools page visibility for access view`
+- `6854d3f` `fix(android): restore logs requests connections visibility`
+- `<本次>` `perf(android): extend visibility control to proxies and profiles`
 
 ---
 
 ## 九、简短结论
 
-这个 fork 当前的 Android 省电方向不是“更聪明地控制代理启停”，而是：
+这个 fork 当前的 Android 省电方向不是"更聪明地控制代理启停"，而是：
 
 > **尽可能少做后台无意义工作，同时尽量不改变代理主运行链。**
 

@@ -1,3 +1,4 @@
+﻿import 'dart:async';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -20,26 +21,33 @@ class ProfilesView extends StatefulWidget {
   State<ProfilesView> createState() => _ProfilesViewState();
 }
 
-class _ProfilesViewState extends State<ProfilesView> {
+class _ProfilesViewState extends State<ProfilesView>
+    with WidgetsBindingObserver {
   Function? applyConfigDebounce;
   bool _isUpdating = false;
 
-  // final GlobalKey _targetKey = GlobalKey();
+  bool get _isViewActive {
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (lifecycleState != AppLifecycleState.resumed) return false;
+    return globalState.container.read(currentPageLabelProvider) ==
+        PageLabel.profiles;
+  }
 
   @override
   void initState() {
     super.initState();
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   final context = _targetKey.currentContext;
-    //   if (context == null) {
-    //     return;
-    //   }
-    //   Scrollable.ensureVisible(
-    //     context,
-    //     duration: commonDuration,
-    //     alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-    //   );
-    // });
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // profiles 页面主要是静态内容，不需要特殊的生命周期处理
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   void _handleShowAddExtendPage() {
@@ -119,7 +127,9 @@ class _ProfilesViewState extends State<ProfilesView> {
     return Consumer(
       builder: (_, ref, _) {
         final appLocalizations = context.appLocalizations;
-        final isLoading = ref.watch(loadingProvider(LoadingTag.profiles));
+        final isLoading = _isViewActive
+            ? ref.watch(loadingProvider(LoadingTag.profiles))
+            : false;
         final state = ref.watch(profilesStateProvider);
         final spacing = 14.mAp;
         return CommonScaffold(
@@ -341,19 +351,6 @@ class ProfileItem extends StatelessWidget {
                                     );
                                   },
                                 ),
-                                // PopupMenuItemData(
-                                //   icon: Icons.extension_outlined,
-                                //   label: appLocalizations.override + "1",
-                                //   onPressed: () {
-                                //     final overrideProfileView = OverrideProfileView(
-                                //       profileId: profile.id,
-                                //     );
-                                //     BaseNavigator.push(
-                                //       context,
-                                //       overrideProfileView,
-                                //     );
-                                //   },
-                                // ),
                                 if (profile.type == ProfileType.url) ...[
                                   PopupMenuItemData(
                                     icon: Icons.copy,
@@ -427,7 +424,7 @@ class ProfileItem extends StatelessWidget {
   }
 }
 
-class LastUpdateTimeText extends StatelessWidget {
+class LastUpdateTimeText extends StatefulWidget {
   final DateTime? lastUpdateDate;
   final TextStyle? style;
 
@@ -438,18 +435,76 @@ class LastUpdateTimeText extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    if (lastUpdateDate == null) {
-      return Text('', style: style);
+  State<LastUpdateTimeText> createState() => _LastUpdateTimeTextState();
+}
+
+class _LastUpdateTimeTextState extends State<LastUpdateTimeText>
+    with WidgetsBindingObserver {
+  Timer? _timer;
+  int _tick = 0;
+
+  bool get _isUiActive {
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    return lifecycleState == null ||
+        lifecycleState == AppLifecycleState.resumed;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startTimer();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cancelTimer();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (mounted) {
+        setState(() {
+          _tick++;
+        });
+      }
+      _startTimer();
+    } else {
+      _cancelTimer();
     }
-    return TickBuilder(
-      duration: const Duration(minutes: 1),
-      builder: (context, _) {
-        return Text(
-          lastUpdateDate!.getLastUpdateTimeDesc(context),
-          style: style,
-        );
-      },
+  }
+
+  void _cancelTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void _startTimer() {
+    _cancelTimer();
+    if (!_isUiActive) return;
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!mounted) return;
+      if (!_isUiActive) {
+        _cancelTimer();
+        return;
+      }
+      setState(() {
+        _tick++;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.lastUpdateDate == null) {
+      return Text('', style: widget.style);
+    }
+    return Text(
+      widget.lastUpdateDate!.getLastUpdateTimeDesc(context),
+      style: widget.style,
     );
   }
 }
