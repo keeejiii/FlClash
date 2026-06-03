@@ -72,9 +72,8 @@ class _CoreContainerState extends ConsumerState<CoreManager>
 
   @override
   void onLog(Log log) {
-    if (!foregroundUiController.isForegroundUiActive) return;
     ref.read(logsProvider.notifier).add(log);
-    if (log.logLevel == LogLevel.error) {
+    if (log.logLevel == LogLevel.error && foregroundUiController.isForegroundUiActive) {
       globalState.showNotifier(log.payload);
     }
     super.onLog(log);
@@ -82,7 +81,6 @@ class _CoreContainerState extends ConsumerState<CoreManager>
 
   @override
   void onRequest(TrackerInfo trackerInfo) async {
-    if (!foregroundUiController.isForegroundUiActive) return;
     ref.read(requestsProvider.notifier).addRequest(trackerInfo);
     super.onRequest(trackerInfo);
   }
@@ -112,4 +110,6 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     super.onCrash(message);
   }
 }
+
+
 
